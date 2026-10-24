@@ -3176,9 +3176,9 @@ export const tidrxAbi = [
 
 export const deployments = {
   "143": {
-    "address": "0x1F8061d653896fF48EbFDD3Fee7C0684E2995f77",
-    "tidrx": "0x18Bc5bcC660cf2B9cE3cd51a404aFe1a0cBD3C22",
-    "minter": "0x0000000000000000000000000000000000000000",
+    "address": "0x4b453b395eEa830C5CB208551A0326f6cd976f12",
+    "tidrx": "0xEf3369C083B137C0FB3Fa9424990726d424ac205",
+    "minter": "0x55aFfcB5E59c966f982BC3FCB636A8c3FAc5e647",
     "operator": "0x87C623386314120eD44E0F710923570484cDB6D1",
     "tokoA": "0x0000000000000000000000000000000000000000",
     "tokoB": "0x0000000000000000000000000000000000000000",
@@ -3187,7 +3187,7 @@ export const deployments = {
     "batasSengketa": 86400,
     "treasury": "0x87C623386314120eD44E0F710923570484cDB6D1",
     "platformFeeBps": 300,
-    "deployBlock": 116125896
+    "deployBlock": 116137717
   },
   "10143": {
     "address": "0x24b045E3B4155232F81c709dF3DD43595a5C5101",
