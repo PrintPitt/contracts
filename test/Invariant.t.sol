@@ -54,6 +54,11 @@ contract Handler is Test {
         try fk.komplain(ids[bound(i, 0, ids.length - 1)]) {} catch {}
     }
 
+    function tutupSengketa(uint256 i) external {
+        if (ids.length == 0) return;
+        try fk.tutupSengketa(ids[bound(i, 0, ids.length - 1)]) {} catch {}
+    }
+
     function putuskan(uint256 i, uint16 bagian) external {
         if (ids.length == 0) return;
         vm.prank(operator);
@@ -97,7 +102,7 @@ contract InvariantTest is Test {
 
     function setUp() public {
         idrx = new TestIDRX(address(this));
-        fk = new FotokopiKilat("Fotokopi Kilat", "FKL", 45, 300, idrx);
+        fk = new FotokopiKilat("Fotokopi Kilat", "FKL", 45, 300, 600, idrx);
         uint8[] memory satu = new uint8[](1);
         satu[0] = 1;
         uint8[] memory dua = new uint8[](2);

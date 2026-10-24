@@ -6,6 +6,9 @@ solc = "0.8.31"
 optimizer = true
 optimizer_runs = 200
 fs_permissions = [{ access = "read-write", path = "./deployments" }]
+# Monad mengizinkan kode contract sampai 128 KB (EIP-170 Ethereum: 24 KB). Tanpa ini simulasi forge script menolak
+# contract di atas 24 KB.
+code_size_limit = 131072
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",

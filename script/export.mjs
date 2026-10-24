@@ -37,6 +37,7 @@ for (const f of readdirSync(`${root}deployments`).filter((f) => f.endsWith('.jso
     tokoB: d.tokoB,
     batasAntre: d.batasAntre,
     batasJemput: d.batasJemput ?? null,
+    batasSengketa: d.batasSengketa ?? null,
     treasury: d.treasury ?? null,
     platformFeeBps: d.platformFeeBps ?? null,
     deployBlock,

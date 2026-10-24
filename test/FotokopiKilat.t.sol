@@ -18,6 +18,7 @@ contract FotokopiKilatTest is Test {
 
     uint32 constant ANTRE = 45;
     uint32 constant JEMPUT = 600;
+    uint32 constant SENGKETA = 1 days;
     bytes32 constant DOK = keccak256("dokumen terenkripsi");
     bytes32 constant RAHASIA = keccak256("rahasia QR pelanggan");
     uint96 constant H1 = 500_000; // Rp5.000 (tIDRX 2 desimal)
@@ -36,7 +37,7 @@ contract FotokopiKilatTest is Test {
         vm.warp(1_000_000);
         vm.startPrank(operator);
         idrx = new TestIDRX(operator);
-        fk = new FotokopiKilat("Fotokopi Kilat", "FKL", ANTRE, JEMPUT, idrx);
+        fk = new FotokopiKilat("Fotokopi Kilat", "FKL", ANTRE, JEMPUT, SENGKETA, idrx);
         fk.setKatalog(1, H1, 0, 30, 0, _resep1(FOTOKOPI), "FOTOKOPI KTP");
         fk.setKatalog(2, H1, 0, 30, 0, _resep1(PRINT), "BOARDING PASS");
         fk.setKatalog(3, H3, 0, 45, 0, _resep2(FOTOKOPI, LAMINATING), "LAMINATING IJAZAH");
@@ -776,5 +777,45 @@ contract FotokopiKilatTest is Test {
         vm.prank(pelanggan);
         vm.expectRevert(FotokopiKilat.NotShop.selector);
         fk.langgananPro(1);
+    }
+
+    // ======================================================== v2.2 batas waktu sengketa
+
+    function test_TutupSengketa_SetelahBatas() public {
+        vm.prank(operator);
+        fk.setPlatform(300, treasury, 0);
+        uint64 id = _pesanKode(1, 1);
+        _kerjakan(id, 10);
+        uint256 siap = block.timestamp;
+        vm.prank(pelanggan);
+        fk.komplain(id);
+        vm.warp(siap + JEMPUT + SENGKETA - 1);
+        vm.expectRevert(FotokopiKilat.NotExpired.selector);
+        fk.tutupSengketa(id);
+        vm.warp(siap + JEMPUT + SENGKETA);
+        uint256 payout = uint256(H1) * 20 / 30 / 2; // bagian default 50%
+        uint256 fee = payout * 300 / 10_000;
+        uint256 tokoSebelum = _bal(tokoA);
+        uint256 pelangganSebelum = _bal(pelanggan);
+        vm.expectEmit(true, true, false, true);
+        emit FotokopiKilat.DisputeResolved(id, tokoA, payout - fee, H1 - payout, true);
+        fk.tutupSengketa(id); // siapa saja (keeper)
+        assertEq(_bal(tokoA) - tokoSebelum, payout - fee);
+        assertEq(_bal(pelanggan) - pelangganSebelum, H1 - payout);
+        assertEq(_bal(treasury), fee);
+        assertEq(uint8(_status(id)), uint8(FotokopiKilat.Status.Diputuskan));
+        assertEq(_bal(address(fk)), 0);
+        vm.expectRevert(FotokopiKilat.NotDisputed.selector);
+        fk.tutupSengketa(id);
+    }
+
+    function test_TutupSengketa_HanyaUntukSengketa() public {
+        uint64 id = _pesanKode(1, 1);
+        _kerjakan(id, 5);
+        vm.warp(block.timestamp + JEMPUT + SENGKETA);
+        vm.expectRevert(FotokopiKilat.NotDisputed.selector);
+        fk.tutupSengketa(id); // Siap tanpa komplain: ditutup lewat expire, bukan tutupSengketa
+        fk.expire(id);
+        assertEq(uint8(_status(id)), uint8(FotokopiKilat.Status.Finished));
     }
 }

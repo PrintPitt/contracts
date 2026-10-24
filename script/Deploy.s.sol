@@ -19,6 +19,7 @@ import {TestIDRX} from "../src/TestIDRX.sol";
 ///   NFT_NAME, NFT_SYMBOL   default "Fotokopi Kilat" / "FKL" (nama project masih ditunda)
 ///   BATAS_ANTRE            detik, default 45
 ///   BATAS_JEMPUT           detik setelah Siap sebelum order bisa ditutup tanpa serah terima, default 600
+///   BATAS_SENGKETA         detik setelah batas jemput sebelum sengketa bisa ditutup otomatis (50/50), default 86400
 ///   START_SESSION          default true
 contract Deploy is Script {
     uint96 constant RP = 100; // 1 Rupiah = 100 satuan tIDRX
@@ -28,6 +29,7 @@ contract Deploy is Script {
         address tokoB = vm.envAddress("TOKO_B");
         uint32 batasAntre = uint32(vm.envOr("BATAS_ANTRE", uint256(45)));
         uint32 batasJemput = uint32(vm.envOr("BATAS_JEMPUT", uint256(600)));
+        uint32 batasSengketa = uint32(vm.envOr("BATAS_SENGKETA", uint256(1 days)));
         address minter = vm.envOr("MINTER", address(0));
 
         vm.startBroadcast();
@@ -38,6 +40,7 @@ contract Deploy is Script {
             vm.envOr("NFT_SYMBOL", string("FKL")),
             batasAntre,
             batasJemput,
+            batasSengketa,
             idrx
         );
         // Harga tetap (mode demo mini-game, 1 halaman)
@@ -68,6 +71,7 @@ contract Deploy is Script {
         vm.serializeAddress(key, "tokoB", tokoB);
         vm.serializeUint(key, "batasAntre", batasAntre);
         vm.serializeUint(key, "batasJemput", batasJemput);
+        vm.serializeUint(key, "batasSengketa", batasSengketa);
         vm.serializeAddress(key, "treasury", fk.treasury());
         vm.serializeUint(key, "platformFeeBps", fk.platformFeeBps());
         string memory json = vm.serializeUint(key, "chainId", block.chainid);

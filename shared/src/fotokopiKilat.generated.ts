@@ -24,12 +24,30 @@ export const fotokopiKilatAbi = [
         "internalType": "uint32"
       },
       {
+        "name": "batasSengketa_",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
         "name": "token_",
         "type": "address",
         "internalType": "contract IERC20"
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "BAGIAN_DEFAULT_SENGKETA",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -214,6 +232,19 @@ export const fotokopiKilatAbi = [
   {
     "type": "function",
     "name": "batasJemput",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "batasSengketa",
     "inputs": [],
     "outputs": [
       {
@@ -1373,6 +1404,19 @@ export const fotokopiKilatAbi = [
     "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "tutupSengketa",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "event",
     "name": "Approval",
     "inputs": [
@@ -1449,6 +1493,12 @@ export const fotokopiKilatAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "otomatis",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -3052,17 +3102,18 @@ export const tidrxAbi = [
 
 export const deployments = {
   "10143": {
-    "address": "0x7aa3616045f98AE7CFEfD495aFEDbfCDE38B3181",
-    "tidrx": "0xa5A96e268D6d75473B7b15c4BAFCDDCDC8223589",
+    "address": "0x08b700EEcbabcfFBe53c0dAbe4C2acF9aF4dc959",
+    "tidrx": "0x6F11E9dd404AF78522DAb5104fF0b6153c7E4841",
     "minter": "0x382D1cfe4036f977C1d7A4ecF8B81E1e67F89e7d",
     "operator": "0xf94e039dc723De798F065cFC3202Eedb040D8415",
     "tokoA": "0xD9B470dd86E9876B59Ec4CCd797811D5a8f293e0",
     "tokoB": "0x8B0a62CA2523E33a1B51E28069613f6039Ea1c7F",
     "batasAntre": 45,
     "batasJemput": 600,
+    "batasSengketa": 86400,
     "treasury": "0x1D3a9498F7e32661f3729677d0D773b40F70EAF4",
     "platformFeeBps": 300,
-    "deployBlock": 73738764
+    "deployBlock": 73741333
   },
   "31337": {
     "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
@@ -3073,6 +3124,7 @@ export const deployments = {
     "tokoB": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
     "batasAntre": 45,
     "batasJemput": 600,
+    "batasSengketa": 86400,
     "treasury": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     "platformFeeBps": 300,
     "deployBlock": 2

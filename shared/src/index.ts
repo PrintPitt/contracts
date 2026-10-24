@@ -73,14 +73,15 @@ export const GAS_LIMIT = {
   approve: 62_000n,
   mint: 100_000n, // mint pertama di token baru (totalSupply 0) 89.618; berikutnya ±72.550
   claim: 65_000n,
-  completeStep: 300_000n, // langkah terakhir order tanpa kode = penyelesaian penuh + fee platform
+  completeStep: 240_000n, // langkah terakhir tanpa kode = penyelesaian penuh + fee + NFT (v2.2: 199.003)
   expire: 85_000n,
   // penyelesaian penuh = payout + fee treasury + refund + mint NFT (serahkan v2.1 terukur 236.005)
   expireSiap: 260_000n,
   serahkan: 260_000n,
-  komplain: 70_000n, // belum terukur
-  putuskan: 200_000n, // belum terukur
-  langgananPro: 120_000n, // belum terukur
+  komplain: 40_000n, // v2.2: 34.777
+  putuskan: 140_000n, // v2.2: 123.734
+  tutupSengketa: 140_000n, // sama dengan putuskan
+  langgananPro: 135_000n, // v2.2: 117.060
 } as const;
 
 /** Validasi teks persis seperti `_teksValid` di contract: 1..40 byte ASCII cetak, tanpa < > & " ' \ */

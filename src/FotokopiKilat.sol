@@ -113,6 +113,8 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     uint16 public constant MAX_PLATFORM_FEE_BPS = 1_000; // maks. 10%
     uint256 public constant PERIODE_PRO = 30 days;
     uint8 public constant MAX_PERIODE_PRO = 12;
+    /// @notice Pembagian bila operator tidak memutuskan sengketa sampai batas waktu: separuh payout terkunci ke toko.
+    uint16 public constant BAGIAN_DEFAULT_SENGKETA = 5_000;
 
     bytes32 public constant PESANAN_TYPEHASH = keccak256(
         "Pesanan(address pelanggan,uint8 jenis,string teks,uint16 halaman,bytes32 dokumen,bytes32 kodeHash,uint256 nonce,uint256 deadline,uint256 maxFee)"
@@ -124,6 +126,7 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     address public immutable operator;
     uint32 public immutable batasAntre;
     uint32 public immutable batasJemput; // detik setelah Siap; lewat itu order bisa ditutup tanpa serah terima
+    uint32 public immutable batasSengketa; // detik setelah batas jemput; lewat itu sengketa bisa ditutup siapa saja
 
     uint32 public sesiId;
     bool public sesiAktif;
@@ -173,7 +176,8 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     event OrderFinished(uint64 indexed id, address indexed toko, uint256 payout, uint256 refund, uint32 kerja, bool diserahkan);
     event OrderExpired(uint64 indexed id, uint256 refund, AlasanExpire alasan);
     event OrderDisputed(uint64 indexed id);
-    event DisputeResolved(uint64 indexed id, address indexed toko, uint256 payout, uint256 refund);
+    /// @param otomatis true bila ditutup setelah batasSengketa tanpa keputusan operator (bagian default)
+    event DisputeResolved(uint64 indexed id, address indexed toko, uint256 payout, uint256 refund, bool otomatis);
 
     // --------------------------------------------------------------- error
 
@@ -213,14 +217,22 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         _;
     }
 
-    constructor(string memory nama_, string memory simbol_, uint32 batasAntre_, uint32 batasJemput_, IERC20 token_)
+    constructor(
+        string memory nama_,
+        string memory simbol_,
+        uint32 batasAntre_,
+        uint32 batasJemput_,
+        uint32 batasSengketa_,
+        IERC20 token_
+    )
         ERC721(nama_, simbol_)
         EIP712("FotokopiKilat", "2")
     {
-        if (batasAntre_ == 0 || batasJemput_ == 0 || address(token_) == address(0)) revert BadValue();
+        if (batasAntre_ == 0 || batasJemput_ == 0 || batasSengketa_ == 0 || address(token_) == address(0)) revert BadValue();
         operator = msg.sender;
         batasAntre = batasAntre_;
         batasJemput = batasJemput_;
+        batasSengketa = batasSengketa_;
         token = token_;
     }
 
@@ -419,6 +431,21 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         Order storage o = order[id];
         if (o.status != Status.Sengketa) revert NotDisputed();
         if (bagianToko > BPS) revert BadShare();
+        _putuskan(id, o, bagianToko, false);
+    }
+
+    // --------------------------------------------------------- siapa saja
+
+    /// @notice Sengketa yang tidak diputuskan operator sampai siapPada + batasJemput + batasSengketa ditutup siapa saja
+    /// (keeper) dengan bagian default, supaya dana tidak tertahan selamanya bila operator tidak bertindak.
+    function tutupSengketa(uint64 id) external nonReentrant {
+        Order storage o = order[id];
+        if (o.status != Status.Sengketa) revert NotDisputed();
+        if (block.timestamp < uint256(o.siapPada) + batasJemput + batasSengketa) revert NotExpired();
+        _putuskan(id, o, BAGIAN_DEFAULT_SENGKETA, true);
+    }
+
+    function _putuskan(uint64 id, Order storage o, uint16 bagianToko, bool otomatis) private {
         uint256 harga = o.harga;
         uint256 payout = _payout(harga, o.batasKerja, o.kerja) * bagianToko / BPS;
         uint256 refund = harga - payout;
@@ -426,11 +453,9 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         address t = o.toko;
         o.status = Status.Diputuskan;
         omzet[o.sesi][t] += payout - fee;
-        emit DisputeResolved(id, t, payout - fee, refund);
+        emit DisputeResolved(id, t, payout - fee, refund, otomatis);
         _bayar(id, t, payout - fee, fee, o.pelanggan, refund);
     }
-
-    // --------------------------------------------------------- siapa saja
 
     /// @notice Dipanggil keeper/siapa saja. Open lewat batas antre atau Claimed lewat batas kerja: refund penuh.
     /// Siap lewat batasJemput: ditutup tanpa serah terima (toko tetap dibayar karena pekerjaan sudah siap).
