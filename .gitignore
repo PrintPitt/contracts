@@ -8,3 +8,4 @@ deployments/31337.json
 !.env.example
 .DS_Store
 broadcast/**/dry-run/
+broadcast/**/*.lock
