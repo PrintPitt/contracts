@@ -1,0 +1,9 @@
+cache/
+out/
+# hasil deploy lokal anvil (berubah tiap uji); testnet tetap di-commit
+broadcast/*/31337/
+deployments/31337.json
+.env
+.env.*
+!.env.example
+.DS_Store

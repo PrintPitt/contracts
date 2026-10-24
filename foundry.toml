@@ -1,0 +1,39 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.31"
+optimizer = true
+optimizer_runs = 200
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+
+# Invariant memindai semua order tiap pengecekan (O(n)); 256 x 500 butuh ~9 menit.
+# Default cepat untuk dev; jalankan penuh dengan FOUNDRY_PROFILE=deep.
+[invariant]
+runs = 32
+depth = 64
+
+[profile.deep.invariant]
+runs = 256
+depth = 500
+
+[rpc_endpoints]
+monad_testnet = "${MONAD_RPC_URL}"
+
+[fmt]
+line_length = 120
+
+# Lint yang sengaja dimatikan (sudah ditinjau terhadap desain):
+# - block-timestamp: payout meluruh memang berbasis detik; geser beberapa detik oleh leader diterima.
+# - unsafe-typecast: uint40(timestamp), uint32(kerja < batasKerja), uint8(n <= 4) tidak bisa terpotong.
+# - unsafe-oz-erc721-mint: _mint dipakai sengaja supaya tidak ada callback onERC721Received (reentrancy).
+# - require-revert-in-loop: validasi resep katalog (maks. 4 item) oleh operator.
+# - reentrancy-events: TransferTertunda setelah call hanya di fungsi nonReentrant.
+[lint]
+exclude_lints = ["block-timestamp", "unsafe-typecast", "unsafe-oz-erc721-mint", "require-revert-in-loop", "reentrancy-events"]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

@@ -1,0 +1,22 @@
+{
+  "name": "@printpitt/shared",
+  "version": "0.1.0",
+  "description": "ABI, alamat deploy, dan helper bersama PrintPitt (contract FotokopiKilat + token tIDRX) untuk backend dan frontend",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p .",
+    "pack:vendor": "npm run build && npm pack --pack-destination ."
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}
