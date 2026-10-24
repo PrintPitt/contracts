@@ -12,7 +12,10 @@ import {TestIDRX} from "../src/TestIDRX.sol";
 ///   TOKO_A, TOKO_B         alamat toko
 ///   NAMA_TOKO_A/B          default "Toko A" / "Toko B"
 ///   MINTER                 alamat backend top-up yang boleh mencetak tIDRX (default: deployer saja)
-///   RELAY_FEE              fee relayer dalam satuan tIDRX (2 desimal), default 10000 = Rp100
+///   RELAY_FEE              fee layanan relayer dalam satuan tIDRX (2 desimal), default 20000 = Rp200
+///   TREASURY               penerima fee platform + langganan Toko Pro (default: deployer)
+///   PLATFORM_FEE_BPS       potongan platform dari payout toko, default 300 = 3%
+///   HARGA_PRO              harga Toko Pro per 30 hari dalam satuan tIDRX, default 5000000 = Rp50.000
 ///   NFT_NAME, NFT_SYMBOL   default "Fotokopi Kilat" / "FKL" (nama project masih ditunda)
 ///   BATAS_ANTRE            detik, default 45
 ///   BATAS_JEMPUT           detik setelah Siap sebelum order bisa ditutup tanpa serah terima, default 600
@@ -46,7 +49,11 @@ contract Deploy is Script {
         fk.setKatalog(5, 1_000 * RP, 500 * RP, 20, 3, _resep(2, 0), "PRINT DOKUMEN");
         fk.setKatalog(6, 500 * RP, 300 * RP, 20, 2, _resep(1, 0), "FOTOKOPI DOKUMEN");
         fk.setKatalog(7, 3_000 * RP, 1_000 * RP, 30, 5, _resep(2, 3), "PRINT + LAMINATING");
-        fk.setFeeRelay(uint96(vm.envOr("RELAY_FEE", uint256(100 * RP))));
+        fk.setFeeRelay(uint96(vm.envOr("RELAY_FEE", uint256(200 * RP))));
+        address treasury = vm.envOr("TREASURY", msg.sender);
+        fk.setPlatform(
+            uint16(vm.envOr("PLATFORM_FEE_BPS", uint256(300))), treasury, uint96(vm.envOr("HARGA_PRO", uint256(50_000 * RP)))
+        );
         fk.registerShop(tokoA, vm.envOr("NAMA_TOKO_A", string("Toko A")));
         fk.registerShop(tokoB, vm.envOr("NAMA_TOKO_B", string("Toko B")));
         if (vm.envOr("START_SESSION", true)) fk.startSession();
@@ -61,6 +68,8 @@ contract Deploy is Script {
         vm.serializeAddress(key, "tokoB", tokoB);
         vm.serializeUint(key, "batasAntre", batasAntre);
         vm.serializeUint(key, "batasJemput", batasJemput);
+        vm.serializeAddress(key, "treasury", fk.treasury());
+        vm.serializeUint(key, "platformFeeBps", fk.platformFeeBps());
         string memory json = vm.serializeUint(key, "chainId", block.chainid);
         string memory path = string.concat(vm.projectRoot(), "/deployments/", vm.toString(block.chainid), ".json");
         vm.writeJson(json, path);

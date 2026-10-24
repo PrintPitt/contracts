@@ -17,6 +17,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 /// langkah. Payout turun per detik sampai toko menandai siap; sisanya jadi cashback pelanggan. Dana cair saat serah
 /// terima: toko memindai QR rahasia pelanggan (`kodeHash` di order). Order tanpa `kodeHash` (mode demo mini-game)
 /// langsung selesai di langkah terakhir. Pelanggan tanpa MON bisa memesan lewat relayer (EIP-712 + permit).
+/// Revenue platform (v2.1): `platformFeeBps` dari payout toko saat order selesai, dan langganan Toko Pro, ke `treasury`.
 /// Spesifikasi: vault/04-Architecture/Desain Contract.md
 contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     using Strings for uint256;
@@ -109,6 +110,9 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     uint8 public constant LANGKAH_TERTINGGI = 3; // 1 Fotokopi, 2 Print, 3 Laminating
     uint16 public constant MAX_HALAMAN = 500;
     uint16 public constant BPS = 10_000;
+    uint16 public constant MAX_PLATFORM_FEE_BPS = 1_000; // maks. 10%
+    uint256 public constant PERIODE_PRO = 30 days;
+    uint8 public constant MAX_PERIODE_PRO = 12;
 
     bytes32 public constant PESANAN_TYPEHASH = keccak256(
         "Pesanan(address pelanggan,uint8 jenis,string teks,uint16 halaman,bytes32 dokumen,bytes32 kodeHash,uint256 nonce,uint256 deadline,uint256 maxFee)"
@@ -125,6 +129,9 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     bool public sesiAktif;
     uint64 public nextId = 1;
     uint96 public feeRelay; // fee per pesanan lewat relayer, dalam satuan token
+    uint16 public platformFeeBps; // potongan platform dari payout toko (hanya order yang selesai)
+    address public treasury;
+    uint96 public hargaPro; // harga Toko Pro per PERIODE_PRO, dalam satuan token
 
     mapping(uint8 jenis => Katalog) public katalog;
     mapping(address alamat => Toko) public toko;
@@ -132,6 +139,7 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     mapping(uint32 sesi => mapping(address toko => uint256)) public omzet;
     mapping(uint64 id => Order) internal order; // dibaca lewat getOrder (getter otomatis 18 nilai = stack too deep)
     mapping(address pelanggan => uint256) public nonces;
+    mapping(address toko => uint40) public proSampai;
 
     // --------------------------------------------------------------- event
 
@@ -149,6 +157,9 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     event SessionStarted(uint32 indexed sesiId, uint40 waktu);
     event SessionEnded(uint32 indexed sesiId, uint40 waktu);
     event FeeRelaySet(uint96 fee);
+    event PlatformSet(uint16 feeBps, address treasury, uint96 hargaPro);
+    event PlatformFeeTaken(uint64 indexed id, uint256 fee);
+    event ProSubscribed(address indexed toko, uint40 sampai, uint256 bayar);
     event OrderCreated(
         uint64 indexed id, address indexed pelanggan, uint8 jenis, uint96 harga, string teks, uint40 dibuatPada
     );
@@ -248,6 +259,16 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     function setFeeRelay(uint96 fee) external onlyOperator {
         feeRelay = fee;
         emit FeeRelaySet(fee);
+    }
+
+    /// @notice Atur revenue platform: potongan dari payout toko (maks. 10%), treasury penerima, harga Toko Pro per 30 hari.
+    function setPlatform(uint16 feeBps, address treasury_, uint96 hargaPro_) external onlyOperator {
+        if (feeBps > MAX_PLATFORM_FEE_BPS) revert BadShare();
+        if (treasury_ == address(0)) revert BadValue();
+        platformFeeBps = feeBps;
+        treasury = treasury_;
+        hargaPro = hargaPro_;
+        emit PlatformSet(feeBps, treasury_, hargaPro_);
     }
 
     function registerShop(address alamat, string calldata nama) external onlyOperator {
@@ -377,6 +398,19 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         _selesaikan(id, o, true);
     }
 
+    /// @notice Langganan Toko Pro `periode` × 30 hari, dibayar dari saldo token toko ke treasury (perlu `approve`).
+    /// Manfaat Pro di luar contract (radius feed lebih luas, badge, statistik); rebutan claim tetap setara.
+    function langgananPro(uint8 periode) external nonReentrant {
+        if (!toko[msg.sender].terdaftar) revert NotShop();
+        if (periode == 0 || periode > MAX_PERIODE_PRO || hargaPro == 0) revert BadValue();
+        uint256 mulai = proSampai[msg.sender] > block.timestamp ? proSampai[msg.sender] : block.timestamp;
+        uint40 sampai = uint40(mulai + uint256(periode) * PERIODE_PRO);
+        uint256 bayar = uint256(hargaPro) * periode;
+        proSampai[msg.sender] = sampai;
+        emit ProSubscribed(msg.sender, sampai, bayar);
+        token.safeTransferFrom(msg.sender, treasury, bayar);
+    }
+
     // ------------------------------------------------------------- operator
 
     /// @notice Putuskan sengketa: toko menerima `bagianToko` (basis poin) dari payout yang terkunci saat Siap,
@@ -388,12 +422,12 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         uint256 harga = o.harga;
         uint256 payout = _payout(harga, o.batasKerja, o.kerja) * bagianToko / BPS;
         uint256 refund = harga - payout;
+        uint256 fee = payout * platformFeeBps / BPS;
         address t = o.toko;
         o.status = Status.Diputuskan;
-        omzet[o.sesi][t] += payout;
-        emit DisputeResolved(id, t, payout, refund);
-        if (payout != 0) token.safeTransfer(t, payout);
-        if (refund != 0) token.safeTransfer(o.pelanggan, refund);
+        omzet[o.sesi][t] += payout - fee;
+        emit DisputeResolved(id, t, payout - fee, refund);
+        _bayar(id, t, payout - fee, fee, o.pelanggan, refund);
     }
 
     // --------------------------------------------------------- siapa saja
@@ -448,6 +482,10 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
             uint256 v = omzet[sesi][a];
             if (v > omzetTerbaik) (terbaik, omzetTerbaik) = (a, v);
         }
+    }
+
+    function isPro(address t) external view returns (bool) {
+        return proSampai[t] > block.timestamp;
     }
 
     /// @notice Harga dan batas kerja untuk `halaman` halaman jenis ini (sama dengan yang ditarik saat memesan).
@@ -571,16 +609,25 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         uint32 kerja = o.kerja;
         uint256 payout = _payout(harga, o.batasKerja, kerja);
         uint256 refund = harga - payout;
+        uint256 fee = payout * platformFeeBps / BPS;
         address t = o.toko;
         address p = o.pelanggan;
 
         o.status = Status.Finished;
-        omzet[o.sesi][t] += payout;
+        omzet[o.sesi][t] += payout - fee;
         _mint(p, id);
-        emit OrderFinished(id, t, payout, refund, kerja, diserahkan);
+        emit OrderFinished(id, t, payout - fee, refund, kerja, diserahkan);
+        _bayar(id, t, payout - fee, fee, p, refund);
+    }
 
-        // Transfer ERC-20 tidak menjalankan kode penerima, jadi penerima tidak bisa memblokir order.
-        if (payout != 0) token.safeTransfer(t, payout);
+    /// @dev Bayar toko (bersih), fee platform ke treasury, sisa ke pelanggan. Dipanggil setelah semua state ditulis.
+    /// Transfer ERC-20 tidak menjalankan kode penerima, jadi penerima tidak bisa memblokir order.
+    function _bayar(uint64 id, address t, uint256 bersih, uint256 fee, address p, uint256 refund) private {
+        if (fee != 0) {
+            emit PlatformFeeTaken(id, fee);
+            token.safeTransfer(treasury, fee);
+        }
+        if (bersih != 0) token.safeTransfer(t, bersih);
         if (refund != 0) token.safeTransfer(p, refund);
     }
 

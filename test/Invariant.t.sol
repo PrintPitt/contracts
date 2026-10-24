@@ -93,6 +93,7 @@ contract InvariantTest is Test {
     Handler h;
     address tokoA = makeAddr("inv-tokoA");
     address tokoB = makeAddr("inv-tokoB");
+    address treasury = makeAddr("inv-treasury");
 
     function setUp() public {
         idrx = new TestIDRX(address(this));
@@ -106,6 +107,7 @@ contract InvariantTest is Test {
         fk.setKatalog(3, 1_000_000, 0, 45, 0, dua, "C");
         fk.setKatalog(4, 1_000_000, 0, 45, 0, dua, "D");
         fk.setKatalog(5, 100_000, 50_000, 20, 2, satu, "E");
+        fk.setPlatform(300, treasury, 0);
         fk.registerShop(tokoA, "A");
         fk.registerShop(tokoB, "B");
         fk.startSession();
@@ -128,10 +130,11 @@ contract InvariantTest is Test {
         assertEq(idrx.balanceOf(address(fk)), escrow);
     }
 
-    /// Token tidak tercipta atau hilang: pelanggan + toko + contract = total suplai.
+    /// Token tidak tercipta atau hilang: pelanggan + toko + treasury + contract = total suplai.
     function invariant_TokenKekal() public view {
         assertEq(
-            idrx.balanceOf(h.pelanggan()) + idrx.balanceOf(tokoA) + idrx.balanceOf(tokoB) + idrx.balanceOf(address(fk)),
+            idrx.balanceOf(h.pelanggan()) + idrx.balanceOf(tokoA) + idrx.balanceOf(tokoB) + idrx.balanceOf(treasury)
+                + idrx.balanceOf(address(fk)),
             idrx.totalSupply()
         );
     }

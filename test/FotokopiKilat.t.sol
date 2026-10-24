@@ -14,6 +14,7 @@ contract FotokopiKilatTest is Test {
     address tokoB = makeAddr("tokoB");
     address pelanggan = makeAddr("pelanggan");
     address relayer = makeAddr("relayer");
+    address treasury = makeAddr("treasury");
 
     uint32 constant ANTRE = 45;
     uint32 constant JEMPUT = 600;
@@ -109,6 +110,8 @@ contract FotokopiKilatTest is Test {
         fk.registerShop(pelanggan, "X");
         vm.expectRevert(FotokopiKilat.NotOperator.selector);
         fk.putuskan(1, 0);
+        vm.expectRevert(FotokopiKilat.NotOperator.selector);
+        fk.setPlatform(300, treasury, 1);
         vm.expectRevert(FotokopiKilat.NotOperator.selector);
         fk.startSession();
         vm.expectRevert(FotokopiKilat.NotOperator.selector);
@@ -684,5 +687,94 @@ contract FotokopiKilatTest is Test {
         vm.prank(relayer);
         vm.expectRevert(FotokopiKilat.BadSignature.selector);
         fk.createOrderFor(p, sig, FotokopiKilat.Izin(0, 0, 0, 0, 0));
+    }
+
+    // ======================================================== revenue v2.1: platform fee + Toko Pro
+
+    function test_SetPlatform_Validasi() public {
+        vm.startPrank(operator);
+        vm.expectRevert(FotokopiKilat.BadShare.selector);
+        fk.setPlatform(1_001, treasury, 0);
+        vm.expectRevert(FotokopiKilat.BadValue.selector);
+        fk.setPlatform(300, address(0), 0);
+        vm.expectEmit(false, false, false, true);
+        emit FotokopiKilat.PlatformSet(300, treasury, 5_000_000);
+        fk.setPlatform(300, treasury, 5_000_000);
+        vm.stopPrank();
+        assertEq(fk.platformFeeBps(), 300);
+        assertEq(fk.treasury(), treasury);
+    }
+
+    function test_PlatformFee_DariPayoutToko() public {
+        vm.prank(operator);
+        fk.setPlatform(300, treasury, 0);
+        uint256 tokoSebelum = _bal(tokoA);
+        uint256 pelangganSebelum = _bal(pelanggan);
+        uint64 id = _pesanKode(1, 1);
+        _kerjakan(id, 10);
+        uint256 payout = uint256(H1) * 20 / 30;
+        uint256 fee = payout * 300 / 10_000;
+        vm.expectEmit(true, false, false, true);
+        emit FotokopiKilat.PlatformFeeTaken(id, fee);
+        vm.prank(tokoA);
+        fk.serahkan(id, RAHASIA);
+        assertEq(_bal(treasury), fee, "treasury dapat 3% payout");
+        assertEq(_bal(tokoA) - tokoSebelum, payout - fee, "toko dapat payout bersih");
+        assertEq(pelangganSebelum - _bal(pelanggan), payout, "cashback pelanggan tidak terpotong fee");
+        assertEq(fk.omzet(1, tokoA), payout - fee);
+        assertEq(_bal(address(fk)), 0);
+    }
+
+    function test_PlatformFee_TidakAdaSaatExpire() public {
+        vm.prank(operator);
+        fk.setPlatform(300, treasury, 0);
+        uint64 id = _pesan(1);
+        vm.warp(block.timestamp + ANTRE);
+        fk.expire(id);
+        assertEq(_bal(treasury), 0, "order gagal tidak dipotong");
+        assertEq(_bal(pelanggan), SALDO, "refund penuh");
+    }
+
+    function test_PlatformFee_SaatPutuskan() public {
+        vm.prank(operator);
+        fk.setPlatform(500, treasury, 0);
+        uint64 id = _pesanKode(1, 1);
+        _kerjakan(id, 10);
+        vm.prank(pelanggan);
+        fk.komplain(id);
+        vm.prank(operator);
+        fk.putuskan(id, 10_000);
+        uint256 payout = uint256(H1) * 20 / 30;
+        assertEq(_bal(treasury), payout * 500 / 10_000);
+        assertEq(_bal(address(fk)), 0);
+    }
+
+    function test_TokoPro() public {
+        vm.prank(tokoA);
+        vm.expectRevert(FotokopiKilat.BadValue.selector); // harga Pro belum diatur
+        fk.langgananPro(1);
+        vm.prank(operator);
+        fk.setPlatform(300, treasury, 5_000_000); // Rp50.000 / 30 hari
+        vm.prank(operator);
+        idrx.mint(tokoA, 20_000_000);
+        vm.startPrank(tokoA);
+        idrx.approve(address(fk), type(uint256).max);
+        vm.expectRevert(FotokopiKilat.BadValue.selector);
+        fk.langgananPro(13);
+        assertFalse(fk.isPro(tokoA));
+        vm.expectEmit(true, false, false, true);
+        emit FotokopiKilat.ProSubscribed(tokoA, uint40(block.timestamp + 60 days), 10_000_000);
+        fk.langgananPro(2);
+        assertTrue(fk.isPro(tokoA));
+        fk.langgananPro(1); // diperpanjang dari tanggal berakhir, bukan dari sekarang
+        vm.stopPrank();
+        assertEq(fk.proSampai(tokoA), block.timestamp + 90 days);
+        assertEq(_bal(treasury), 15_000_000);
+        vm.warp(block.timestamp + 90 days);
+        assertFalse(fk.isPro(tokoA));
+
+        vm.prank(pelanggan);
+        vm.expectRevert(FotokopiKilat.NotShop.selector);
+        fk.langgananPro(1);
     }
 }

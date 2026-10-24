@@ -85,6 +85,32 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_PERIODE_PRO",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_PLATFORM_FEE_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_TEXT",
     "inputs": [],
     "outputs": [
@@ -99,6 +125,19 @@ export const fotokopiKilatAbi = [
   {
     "type": "function",
     "name": "MAX_TOKO",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PERIODE_PRO",
     "inputs": [],
     "outputs": [
       {
@@ -593,6 +632,19 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "function",
+    "name": "hargaPro",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint96",
+        "internalType": "uint96"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "hargaUntuk",
     "inputs": [
       {
@@ -631,6 +683,25 @@ export const fotokopiKilatAbi = [
       },
       {
         "name": "operator",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isPro",
+    "inputs": [
+      {
+        "name": "t",
         "type": "address",
         "internalType": "address"
       }
@@ -719,6 +790,19 @@ export const fotokopiKilatAbi = [
         "name": "id",
         "type": "uint64",
         "internalType": "uint64"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "langgananPro",
+    "inputs": [
+      {
+        "name": "periode",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "outputs": [],
@@ -888,6 +972,38 @@ export const fotokopiKilatAbi = [
         "name": "omzetTerbaik",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "platformFeeBps",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proSampai",
+    "inputs": [
+      {
+        "name": "toko",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint40",
+        "internalType": "uint40"
       }
     ],
     "stateMutability": "view"
@@ -1099,6 +1215,29 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "function",
+    "name": "setPlatform",
+    "inputs": [
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "treasury_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "hargaPro_",
+        "type": "uint96",
+        "internalType": "uint96"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "startSession",
     "inputs": [],
     "outputs": [],
@@ -1219,6 +1358,19 @@ export const fotokopiKilatAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "treasury",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "event",
@@ -1616,6 +1768,75 @@ export const fotokopiKilatAbi = [
       },
       {
         "name": "fee",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PlatformFeeTaken",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "fee",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PlatformSet",
+    "inputs": [
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "indexed": false,
+        "internalType": "uint16"
+      },
+      {
+        "name": "treasury",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "hargaPro",
+        "type": "uint96",
+        "indexed": false,
+        "internalType": "uint96"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ProSubscribed",
+    "inputs": [
+      {
+        "name": "toko",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "sampai",
+        "type": "uint40",
+        "indexed": false,
+        "internalType": "uint40"
+      },
+      {
+        "name": "bayar",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -2831,15 +3052,17 @@ export const tidrxAbi = [
 
 export const deployments = {
   "10143": {
-    "address": "0xA2a56061f16919a2cFF2a4941db467BDe86B88aa",
-    "tidrx": "0x7C187352Ce1Bf0137aC72b876d0D4e119dBcA8E3",
+    "address": "0x7aa3616045f98AE7CFEfD495aFEDbfCDE38B3181",
+    "tidrx": "0xa5A96e268D6d75473B7b15c4BAFCDDCDC8223589",
     "minter": "0x382D1cfe4036f977C1d7A4ecF8B81E1e67F89e7d",
     "operator": "0xf94e039dc723De798F065cFC3202Eedb040D8415",
     "tokoA": "0xD9B470dd86E9876B59Ec4CCd797811D5a8f293e0",
     "tokoB": "0x8B0a62CA2523E33a1B51E28069613f6039Ea1c7F",
     "batasAntre": 45,
     "batasJemput": 600,
-    "deployBlock": 73733847
+    "treasury": "0x1D3a9498F7e32661f3729677d0D773b40F70EAF4",
+    "platformFeeBps": 300,
+    "deployBlock": 73738764
   },
   "31337": {
     "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
@@ -2850,6 +3073,8 @@ export const deployments = {
     "tokoB": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
     "batasAntre": 45,
     "batasJemput": 600,
+    "treasury": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "platformFeeBps": 300,
     "deployBlock": 2
   }
 } as const;

@@ -73,13 +73,14 @@ export const GAS_LIMIT = {
   approve: 62_000n,
   mint: 100_000n, // mint pertama di token baru (totalSupply 0) 89.618; berikutnya ±72.550
   claim: 65_000n,
-  completeStep: 260_000n,
+  completeStep: 300_000n, // langkah terakhir order tanpa kode = penyelesaian penuh + fee platform
   expire: 85_000n,
-  // v2: penyelesaian penuh = payout + refund + mint NFT (serahkan terukur 194.225)
-  expireSiap: 220_000n,
-  serahkan: 220_000n,
+  // penyelesaian penuh = payout + fee treasury + refund + mint NFT (serahkan v2.1 terukur 236.005)
+  expireSiap: 260_000n,
+  serahkan: 260_000n,
   komplain: 70_000n, // belum terukur
-  putuskan: 170_000n, // belum terukur
+  putuskan: 200_000n, // belum terukur
+  langgananPro: 120_000n, // belum terukur
 } as const;
 
 /** Validasi teks persis seperti `_teksValid` di contract: 1..40 byte ASCII cetak, tanpa < > & " ' \ */
@@ -112,4 +113,26 @@ export function deploymentUntuk(chainId: number | string) {
   const d = (deployments as Record<string, (typeof deployments)[keyof typeof deployments]>)[String(chainId)];
   if (!d) throw new Error(`Belum ada deployment untuk chain ${chainId}. Jalankan deploy lalu node script/export.mjs`);
   return d;
+}
+
+// ---------------------------------------------------------------- backend v2 (dokumen + lokasi)
+
+/** Pesan EIP-191 (personal_sign) yang ditandatangani untuk mengunduh dokumen order. `waktu` = Date.now() ms, berlaku 5 menit. */
+export const pesanUnduh = (dokumen: string, orderId: bigint | number, waktu: number) =>
+  `PrintPitt: unduh dokumen ${dokumen.toLowerCase()} order #${orderId} pada ${waktu}`;
+/** Pesan untuk toko mendaftarkan / memperbarui lokasinya. */
+export const pesanLokasiToko = (toko: string, lat: number, lng: number, waktu: number) =>
+  `PrintPitt: lokasi toko ${toko.toLowerCase()} ${lat},${lng} pada ${waktu}`;
+/** Pesan untuk pelanggan memberi lokasi (kasar) order-nya. */
+export const pesanLokasiOrder = (orderId: bigint | number, lat: number, lng: number, waktu: number) =>
+  `PrintPitt: lokasi order #${orderId} ${lat},${lng} pada ${waktu}`;
+
+/** Koordinat dibulatkan ke 3 desimal (±110 m) sebelum dikirim/disimpan, supaya lokasi presisi tidak tersimpan. */
+export const bulatkanKoordinat = (x: number) => Math.round(x * 1000) / 1000;
+
+/** Jarak dua titik (km), rumus haversine. */
+export function jarakKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const r = (d: number) => (d * Math.PI) / 180;
+  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
 }
