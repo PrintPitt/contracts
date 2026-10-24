@@ -1,4 +1,4 @@
-// DIBUAT OTOMATIS oleh Project/contracts/script/export.mjs. Jangan diedit manual.
+// DIBUAT OTOMATIS oleh script/export.mjs (repo PrintPitt/contracts). Jangan diedit manual.
 export const fotokopiKilatAbi = [
   {
     "type": "constructor",
@@ -2551,6 +2551,16 @@ export const tidrxAbi = [
 ] as const;
 
 export const deployments = {
+  "10143": {
+    "address": "0x346c1fB782847Ce9f672C52dB26E0DBb953a679f",
+    "tidrx": "0x3E890eFBC4089df436589D4c3f5e356afed82322",
+    "minter": "0x382D1cfe4036f977C1d7A4ecF8B81E1e67F89e7d",
+    "operator": "0xf94e039dc723De798F065cFC3202Eedb040D8415",
+    "tokoA": "0xD9B470dd86E9876B59Ec4CCd797811D5a8f293e0",
+    "tokoB": "0x8B0a62CA2523E33a1B51E28069613f6039Ea1c7F",
+    "batasAntre": 45,
+    "deployBlock": 73719650
+  },
   "31337": {
     "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
     "tidrx": "0x5FbDB2315678afecb367f032d93F642f64180aa3",

@@ -7,3 +7,4 @@ deployments/31337.json
 .env.*
 !.env.example
 .DS_Store
+broadcast/**/dry-run/
