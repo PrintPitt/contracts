@@ -23,6 +23,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///   BATAS_ANTRE            detik, default 45
 ///   BATAS_JEMPUT           detik setelah Siap sebelum order bisa ditutup tanpa serah terima, default 600
 ///   BATAS_SENGKETA         detik setelah batas jemput sebelum sengketa bisa ditutup otomatis (50/50), default 86400
+///   HARGA_BAGI             semua harga katalog dibagi angka ini (mainnet demo hemat IDRX: 10 → KTP Rp500), default 1
 ///   START_SESSION          default true
 contract Deploy is Script {
     uint96 constant RP = 100; // 1 Rupiah = 100 satuan tIDRX
@@ -52,15 +53,16 @@ contract Deploy is Script {
             batasSengketa,
             token
         );
+        uint96 b = uint96(vm.envOr("HARGA_BAGI", uint256(1)));
         // Harga tetap (mode demo mini-game, 1 halaman)
-        fk.setKatalog(1, 5_000 * RP, 0, 30, 0, _resep(1, 0), "FOTOKOPI KTP");
-        fk.setKatalog(2, 5_000 * RP, 0, 30, 0, _resep(2, 0), "BOARDING PASS");
-        fk.setKatalog(3, 10_000 * RP, 0, 45, 0, _resep(1, 3), "LAMINATING IJAZAH");
-        fk.setKatalog(4, 10_000 * RP, 0, 45, 0, _resep(2, 3), "MENU WARUNG");
+        fk.setKatalog(1, 5_000 * RP / b, 0, 30, 0, _resep(1, 0), "FOTOKOPI KTP");
+        fk.setKatalog(2, 5_000 * RP / b, 0, 30, 0, _resep(2, 0), "BOARDING PASS");
+        fk.setKatalog(3, 10_000 * RP / b, 0, 45, 0, _resep(1, 3), "LAMINATING IJAZAH");
+        fk.setKatalog(4, 10_000 * RP / b, 0, 45, 0, _resep(2, 3), "MENU WARUNG");
         // Harga per halaman (order dokumen nyata): dasar + per halaman, batas kerja dasar + per halaman
-        fk.setKatalog(5, 1_000 * RP, 500 * RP, 20, 3, _resep(2, 0), "PRINT DOKUMEN");
-        fk.setKatalog(6, 500 * RP, 300 * RP, 20, 2, _resep(1, 0), "FOTOKOPI DOKUMEN");
-        fk.setKatalog(7, 3_000 * RP, 1_000 * RP, 30, 5, _resep(2, 3), "PRINT + LAMINATING");
+        fk.setKatalog(5, 1_000 * RP / b, 500 * RP / b, 20, 3, _resep(2, 0), "PRINT DOKUMEN");
+        fk.setKatalog(6, 500 * RP / b, 300 * RP / b, 20, 2, _resep(1, 0), "FOTOKOPI DOKUMEN");
+        fk.setKatalog(7, 3_000 * RP / b, 1_000 * RP / b, 30, 5, _resep(2, 3), "PRINT + LAMINATING");
         fk.setFeeRelay(uint96(vm.envOr("RELAY_FEE", uint256(200 * RP))));
         address treasury = vm.envOr("TREASURY", msg.sender);
         fk.setPlatform(
