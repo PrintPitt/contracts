@@ -6,27 +6,27 @@ import {FotokopiKilat} from "../src/FotokopiKilat.sol";
 import {TestIDRX} from "../src/TestIDRX.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Deploy token simulasi tIDRX + FotokopiKilat v2, katalog Rupiah (tetap + per halaman), fee relayer, 2 toko, buka sesi.
-/// Alamat ditulis ke deployments/<chainId>.json. Blok deploy diambil dari receipt broadcast oleh `script/export.mjs`.
+/// @notice Deploys the simulated tIDRX token + FotokopiKilat v2, the Rupiah catalog (fixed + per page), the relayer fee, 2 shops, and opens a session.
+/// Addresses are written to deployments/<chainId>.json. The deploy block is read from the broadcast receipt by `script/export.mjs`.
 ///
-/// Env (semua opsional):
-///   TOKEN                  token pembayaran yang sudah ada (mainnet: IDRX 0x18Bc5bcC660cf2B9cE3cd51a404aFe1a0cBD3C22,
-///                          2 desimal). Kosong = deploy TestIDRX (simulasi) + MINTER
-///   TOKO_A, TOKO_B         alamat toko demo yang didaftarkan operator (kosong = tidak ada; toko bisa daftar sendiri)
+/// Env (all optional):
+///   TOKEN                  existing payment token (mainnet: IDRX 0x18Bc5bcC660cf2B9cE3cd51a404aFe1a0cBD3C22,
+///                          2 decimals). Empty = deploy TestIDRX (simulation) + MINTER
+///   TOKO_A, TOKO_B         demo shop addresses registered by the operator (empty = none; shops can register themselves)
 ///   NAMA_TOKO_A/B          default "Toko A" / "Toko B"
-///   MINTER                 alamat backend top-up yang boleh mencetak tIDRX (default: deployer saja)
-///   RELAY_FEE              fee layanan relayer dalam satuan tIDRX (2 desimal), default 20000 = Rp200
-///   TREASURY               penerima fee platform + langganan Toko Pro (default: deployer)
-///   PLATFORM_FEE_BPS       potongan platform dari payout toko, default 300 = 3%
-///   HARGA_PRO              harga Toko Pro per 30 hari dalam satuan tIDRX, default 5000000 = Rp50.000
-///   NFT_NAME, NFT_SYMBOL   default "Fotokopi Kilat" / "FKL" (nama project masih ditunda)
-///   BATAS_ANTRE            detik, default 45
-///   BATAS_JEMPUT           detik setelah Siap sebelum order bisa ditutup tanpa serah terima, default 600
-///   BATAS_SENGKETA         detik setelah batas jemput sebelum sengketa bisa ditutup otomatis (50/50), default 86400
-///   HARGA_BAGI             semua harga katalog dibagi angka ini (mainnet demo hemat IDRX: 10 → KTP Rp500), default 1
+///   MINTER                 top-up backend address allowed to mint tIDRX (default: deployer only)
+///   RELAY_FEE              relayer service fee in tIDRX units (2 decimals), default 20000 = Rp200
+///   TREASURY               receives the platform fee + Shop Pro subscriptions (default: deployer)
+///   PLATFORM_FEE_BPS       platform cut of the shop payout, default 300 = 3%
+///   HARGA_PRO              Shop Pro price per 30 days in tIDRX units, default 5000000 = Rp50,000
+///   NFT_NAME, NFT_SYMBOL   default "Fotokopi Kilat" / "FKL" (working name)
+///   BATAS_ANTRE            queue limit in seconds, default 45
+///   BATAS_JEMPUT           seconds after Ready before an order can be closed without handover, default 600
+///   BATAS_SENGKETA         seconds after the pickup limit before a dispute can be closed automatically (50/50), default 86400
+///   HARGA_BAGI             all catalog prices are divided by this (cheap mainnet demo: 10 → ID copy Rp500), default 1
 ///   START_SESSION          default true
 contract Deploy is Script {
-    uint96 constant RP = 100; // 1 Rupiah = 100 satuan tIDRX
+    uint96 constant RP = 100; // 1 Rupiah = 100 tIDRX units
 
     function run() external returns (FotokopiKilat fk, IERC20 token) {
         address tokoA = vm.envOr("TOKO_A", address(0));
@@ -54,12 +54,12 @@ contract Deploy is Script {
             token
         );
         uint96 b = uint96(vm.envOr("HARGA_BAGI", uint256(1)));
-        // Harga tetap (mode demo mini-game, 1 halaman)
+        // Fixed prices (mini-game demo mode, 1 page)
         fk.setKatalog(1, 5_000 * RP / b, 0, 30, 0, _resep(1, 0), "FOTOKOPI KTP");
         fk.setKatalog(2, 5_000 * RP / b, 0, 30, 0, _resep(2, 0), "BOARDING PASS");
         fk.setKatalog(3, 10_000 * RP / b, 0, 45, 0, _resep(1, 3), "LAMINATING IJAZAH");
         fk.setKatalog(4, 10_000 * RP / b, 0, 45, 0, _resep(2, 3), "MENU WARUNG");
-        // Harga per halaman (order dokumen nyata): dasar + per halaman, batas kerja dasar + per halaman
+        // Per-page prices (real document orders): base + per page, work limit base + per page
         fk.setKatalog(5, 1_000 * RP / b, 500 * RP / b, 20, 3, _resep(2, 0), "PRINT DOKUMEN");
         fk.setKatalog(6, 500 * RP / b, 300 * RP / b, 20, 2, _resep(1, 0), "FOTOKOPI DOKUMEN");
         fk.setKatalog(7, 3_000 * RP / b, 1_000 * RP / b, 30, 5, _resep(2, 3), "PRINT + LAMINATING");
@@ -75,7 +75,7 @@ contract Deploy is Script {
 
         string memory key = "deploy";
         vm.serializeAddress(key, "fotokopiKilat", address(fk));
-        vm.serializeAddress(key, "tidrx", address(token)); // nama field lama; berisi token pembayaran (tIDRX atau IDRX)
+        vm.serializeAddress(key, "tidrx", address(token)); // legacy field name; holds the payment token (tIDRX or IDRX)
         vm.serializeAddress(key, "operator", fk.operator());
         vm.serializeAddress(key, "minter", tokenAda != address(0) ? address(0) : minter == address(0) ? fk.operator() : minter);
         vm.serializeAddress(key, "tokoA", tokoA);
@@ -88,12 +88,12 @@ contract Deploy is Script {
         string memory json = vm.serializeUint(key, "chainId", block.chainid);
         string memory path = string.concat(vm.projectRoot(), "/deployments/", vm.toString(block.chainid), ".json");
         vm.writeJson(json, path);
-        console.log(tokenAda == address(0) ? "TestIDRX (simulasi):" : "Token pembayaran:", address(token));
+        console.log(tokenAda == address(0) ? "TestIDRX (simulation):" : "Payment token:", address(token));
         console.log("FotokopiKilat:", address(fk));
-        console.log("ditulis ke:", path);
+        console.log("written to:", path);
     }
 
-    /// @dev b = 0 berarti resep satu langkah.
+    /// @dev b = 0 means a one-step recipe.
     function _resep(uint8 a, uint8 b) internal pure returns (uint8[] memory r) {
         r = new uint8[](b == 0 ? 1 : 2);
         r[0] = a;
