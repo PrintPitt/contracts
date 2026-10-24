@@ -53,16 +53,18 @@ export const domainTidrx = (chainId: number, verifyingContract: `0x${string}`) =
 
 /**
  * Gas limit per fungsi. Monad menagih gas LIMIT, bukan gas terpakai, jadi jangan pakai estimasi + buffer besar.
- * Angka = maks. terukur di EVM lokal (forge --gas-report) + ~30%. WAJIB diukur ulang di testnet (BLZ-07.T4).
+ * Terukur di Monad testnet 2026-10-24 (gasUsed, +~30%): mint 89.618, approve 52.937, createOrder 204.453, expire 71.781.
+ * `expire` di testnet ~31% lebih mahal dari EVM lokal (54.865), jadi yang belum terukur (claim, completeStep,
+ * createOrderFor) = maks. lokal × 1,31 × 1,3. Ukur ulang begitu wallet toko/relayer berisi MON (BLZ-07.T4).
  */
 export const GAS_LIMIT = {
-  createOrder: 300_000n,
-  createOrderFor: 370_000n,
-  approve: 60_000n,
-  mint: 95_000n,
-  claim: 60_000n,
-  completeStep: 180_000n,
-  expire: 70_000n,
+  createOrder: 270_000n,
+  createOrderFor: 490_000n,
+  approve: 70_000n,
+  mint: 120_000n,
+  claim: 80_000n,
+  completeStep: 270_000n,
+  expire: 95_000n,
 } as const;
 
 /** Validasi teks persis seperti `_teksValid` di contract: 1..40 byte ASCII cetak, tanpa < > & " ' \ */
