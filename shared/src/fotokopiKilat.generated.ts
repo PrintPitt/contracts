@@ -142,19 +142,6 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "function",
-    "name": "MAX_TOKO",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "PERIODE_PRO",
     "inputs": [],
     "outputs": [
@@ -441,6 +428,19 @@ export const fotokopiKilatAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "daftarkanToko",
+    "inputs": [
+      {
+        "name": "nama",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1269,6 +1269,24 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "function",
+    "name": "setTokoAktif",
+    "inputs": [
+      {
+        "name": "alamat",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "aktif",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "startSession",
     "inputs": [],
     "outputs": [],
@@ -1355,6 +1373,11 @@ export const fotokopiKilatAbi = [
         "internalType": "bool"
       },
       {
+        "name": "aktif",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
         "name": "orderAktif",
         "type": "uint64",
         "internalType": "uint64"
@@ -1411,6 +1434,19 @@ export const fotokopiKilatAbi = [
         "name": "id",
         "type": "uint64",
         "internalType": "uint64"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "ubahNamaToko",
+    "inputs": [
+      {
+        "name": "nama",
+        "type": "string",
+        "internalType": "string"
       }
     ],
     "outputs": [],
@@ -1953,6 +1989,44 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "event",
+    "name": "ShopRenamed",
+    "inputs": [
+      {
+        "name": "toko",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "nama",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ShopStatusSet",
+    "inputs": [
+      {
+        "name": "toko",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "aktif",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "StepCompleted",
     "inputs": [
       {
@@ -2280,6 +2354,11 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "error",
+    "name": "ShopInactive",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SignatureExpired",
     "inputs": []
   },
@@ -2297,11 +2376,6 @@ export const fotokopiKilatAbi = [
   {
     "type": "error",
     "name": "TooLate",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "TooManyShops",
     "inputs": []
   },
   {
@@ -3102,8 +3176,8 @@ export const tidrxAbi = [
 
 export const deployments = {
   "10143": {
-    "address": "0x08b700EEcbabcfFBe53c0dAbe4C2acF9aF4dc959",
-    "tidrx": "0x6F11E9dd404AF78522DAb5104fF0b6153c7E4841",
+    "address": "0x24b045E3B4155232F81c709dF3DD43595a5C5101",
+    "tidrx": "0xcCf26C3b02a610fB87327f41a13384aF8ff57F45",
     "minter": "0x382D1cfe4036f977C1d7A4ecF8B81E1e67F89e7d",
     "operator": "0xf94e039dc723De798F065cFC3202Eedb040D8415",
     "tokoA": "0xD9B470dd86E9876B59Ec4CCd797811D5a8f293e0",
@@ -3113,7 +3187,7 @@ export const deployments = {
     "batasSengketa": 86400,
     "treasury": "0x1D3a9498F7e32661f3729677d0D773b40F70EAF4",
     "platformFeeBps": 300,
-    "deployBlock": 73741333
+    "deployBlock": 73752547
   },
   "31337": {
     "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",

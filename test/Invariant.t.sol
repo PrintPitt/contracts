@@ -159,7 +159,7 @@ contract InvariantTest is Test {
                     terakhir = id;
                 }
             }
-            (, uint64 orderAktif,) = fk.toko(ts[k]);
+            (,, uint64 orderAktif,) = fk.toko(ts[k]);
             assertLe(aktif, 1);
             assertEq(orderAktif, terakhir);
         }

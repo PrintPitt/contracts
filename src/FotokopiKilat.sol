@@ -56,6 +56,7 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
 
     struct Toko {
         bool terdaftar;
+        bool aktif; // operator bisa menonaktifkan toko yang curang; toko nonaktif tidak bisa claim
         uint64 orderAktif;
         string nama;
     }
@@ -105,7 +106,6 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     // ------------------------------------------------------------- konstanta
 
     uint256 public constant MAX_TEXT = 40;
-    uint256 public constant MAX_TOKO = 8;
     uint256 public constant MAX_LANGKAH = 4;
     uint8 public constant LANGKAH_TERTINGGI = 3; // 1 Fotokopi, 2 Print, 3 Laminating
     uint16 public constant MAX_HALAMAN = 500;
@@ -157,6 +157,8 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         string label
     );
     event ShopRegistered(address indexed toko, string nama);
+    event ShopRenamed(address indexed toko, string nama);
+    event ShopStatusSet(address indexed toko, bool aktif);
     event SessionStarted(uint32 indexed sesiId, uint40 waktu);
     event SessionEnded(uint32 indexed sesiId, uint40 waktu);
     event FeeRelaySet(uint96 fee);
@@ -191,7 +193,7 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     error BadValue();
     error BadText();
     error ShopExists();
-    error TooManyShops();
+    error ShopInactive();
     error AlreadyClaimed();
     error ShopBusy();
     error QueueTimeout();
@@ -283,13 +285,16 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         emit PlatformSet(feeBps, treasury_, hargaPro_);
     }
 
+    /// @notice Operator mendaftarkan toko atas nama alamat lain (seed demo). Toko biasa mendaftar sendiri lewat `daftarkanToko`.
     function registerShop(address alamat, string calldata nama) external onlyOperator {
-        if (toko[alamat].terdaftar) revert ShopExists();
-        if (daftarToko.length >= MAX_TOKO) revert TooManyShops();
-        if (!_teksValid(bytes(nama))) revert BadText();
-        toko[alamat] = Toko(true, 0, nama);
-        daftarToko.push(alamat);
-        emit ShopRegistered(alamat, nama);
+        _daftar(alamat, nama);
+    }
+
+    /// @notice Operator menonaktifkan / mengaktifkan kembali toko (mis. curang). Toko nonaktif tidak bisa claim order baru.
+    function setTokoAktif(address alamat, bool aktif) external onlyOperator {
+        if (!toko[alamat].terdaftar) revert NotShop();
+        toko[alamat].aktif = aktif;
+        emit ShopStatusSet(alamat, aktif);
     }
 
     function startSession() external onlyOperator {
@@ -360,9 +365,23 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
 
     // ---------------------------------------------------------------- toko
 
+    /// @notice Toko fotokopi mana pun mendaftar sendiri dengan wallet-nya (tanpa izin operator, tanpa batas jumlah).
+    function daftarkanToko(string calldata nama) external {
+        _daftar(msg.sender, nama);
+    }
+
+    function ubahNamaToko(string calldata nama) external {
+        Toko storage t = toko[msg.sender];
+        if (!t.terdaftar) revert NotShop();
+        if (!_teksValid(bytes(nama))) revert BadText();
+        t.nama = nama;
+        emit ShopRenamed(msg.sender, nama);
+    }
+
     function claim(uint64 id) external {
         Toko storage t = toko[msg.sender];
         if (!t.terdaftar) revert NotShop();
+        if (!t.aktif) revert ShopInactive();
         if (!sesiAktif) revert SessionClosed();
         Order storage o = order[id];
         if (o.status != Status.Open) revert AlreadyClaimed();
@@ -500,6 +519,7 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     }
 
     /// @notice Toko dengan omzet tertinggi di sesi; seri dimenangkan toko yang terdaftar lebih dulu.
+    /// Memindai semua toko (view, dipanggil off-chain); leaderboard besar sebaiknya dari indexer (OmzetSesi).
     function pemenang(uint32 sesi) external view returns (address terbaik, uint256 omzetTerbaik) {
         uint256 n = daftarToko.length;
         for (uint256 i; i < n; ++i) {
@@ -654,6 +674,14 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         }
         if (bersih != 0) token.safeTransfer(t, bersih);
         if (refund != 0) token.safeTransfer(p, refund);
+    }
+
+    function _daftar(address alamat, string calldata nama) private {
+        if (toko[alamat].terdaftar) revert ShopExists();
+        if (!_teksValid(bytes(nama))) revert BadText();
+        toko[alamat] = Toko(true, true, 0, nama);
+        daftarToko.push(alamat);
+        emit ShopRegistered(alamat, nama);
     }
 
     function _payout(uint256 harga, uint256 batasKerja, uint256 kerja) private pure returns (uint256) {

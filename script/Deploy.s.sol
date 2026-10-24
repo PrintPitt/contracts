@@ -4,12 +4,15 @@ pragma solidity ^0.8.31;
 import {Script, console} from "forge-std/Script.sol";
 import {FotokopiKilat} from "../src/FotokopiKilat.sol";
 import {TestIDRX} from "../src/TestIDRX.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Deploy token simulasi tIDRX + FotokopiKilat v2, katalog Rupiah (tetap + per halaman), fee relayer, 2 toko, buka sesi.
 /// Alamat ditulis ke deployments/<chainId>.json. Blok deploy diambil dari receipt broadcast oleh `script/export.mjs`.
 ///
-/// Env (semua opsional kecuali TOKO_A dan TOKO_B):
-///   TOKO_A, TOKO_B         alamat toko
+/// Env (semua opsional):
+///   TOKEN                  token pembayaran yang sudah ada (mainnet: IDRX 0x18Bc5bcC660cf2B9cE3cd51a404aFe1a0cBD3C22,
+///                          2 desimal). Kosong = deploy TestIDRX (simulasi) + MINTER
+///   TOKO_A, TOKO_B         alamat toko demo yang didaftarkan operator (kosong = tidak ada; toko bisa daftar sendiri)
 ///   NAMA_TOKO_A/B          default "Toko A" / "Toko B"
 ///   MINTER                 alamat backend top-up yang boleh mencetak tIDRX (default: deployer saja)
 ///   RELAY_FEE              fee layanan relayer dalam satuan tIDRX (2 desimal), default 20000 = Rp200
@@ -24,24 +27,30 @@ import {TestIDRX} from "../src/TestIDRX.sol";
 contract Deploy is Script {
     uint96 constant RP = 100; // 1 Rupiah = 100 satuan tIDRX
 
-    function run() external returns (FotokopiKilat fk, TestIDRX idrx) {
-        address tokoA = vm.envAddress("TOKO_A");
-        address tokoB = vm.envAddress("TOKO_B");
+    function run() external returns (FotokopiKilat fk, IERC20 token) {
+        address tokoA = vm.envOr("TOKO_A", address(0));
+        address tokoB = vm.envOr("TOKO_B", address(0));
+        address tokenAda = vm.envOr("TOKEN", address(0));
         uint32 batasAntre = uint32(vm.envOr("BATAS_ANTRE", uint256(45)));
         uint32 batasJemput = uint32(vm.envOr("BATAS_JEMPUT", uint256(600)));
         uint32 batasSengketa = uint32(vm.envOr("BATAS_SENGKETA", uint256(1 days)));
         address minter = vm.envOr("MINTER", address(0));
 
         vm.startBroadcast();
-        idrx = new TestIDRX(msg.sender);
-        if (minter != address(0)) idrx.grantRole(idrx.MINTER_ROLE(), minter);
+        if (tokenAda == address(0)) {
+            TestIDRX idrx = new TestIDRX(msg.sender);
+            if (minter != address(0)) idrx.grantRole(idrx.MINTER_ROLE(), minter);
+            token = idrx;
+        } else {
+            token = IERC20(tokenAda);
+        }
         fk = new FotokopiKilat(
             vm.envOr("NFT_NAME", string("Fotokopi Kilat")),
             vm.envOr("NFT_SYMBOL", string("FKL")),
             batasAntre,
             batasJemput,
             batasSengketa,
-            idrx
+            token
         );
         // Harga tetap (mode demo mini-game, 1 halaman)
         fk.setKatalog(1, 5_000 * RP, 0, 30, 0, _resep(1, 0), "FOTOKOPI KTP");
@@ -57,16 +66,16 @@ contract Deploy is Script {
         fk.setPlatform(
             uint16(vm.envOr("PLATFORM_FEE_BPS", uint256(300))), treasury, uint96(vm.envOr("HARGA_PRO", uint256(50_000 * RP)))
         );
-        fk.registerShop(tokoA, vm.envOr("NAMA_TOKO_A", string("Toko A")));
-        fk.registerShop(tokoB, vm.envOr("NAMA_TOKO_B", string("Toko B")));
+        if (tokoA != address(0)) fk.registerShop(tokoA, vm.envOr("NAMA_TOKO_A", string("Toko A")));
+        if (tokoB != address(0)) fk.registerShop(tokoB, vm.envOr("NAMA_TOKO_B", string("Toko B")));
         if (vm.envOr("START_SESSION", true)) fk.startSession();
         vm.stopBroadcast();
 
         string memory key = "deploy";
         vm.serializeAddress(key, "fotokopiKilat", address(fk));
-        vm.serializeAddress(key, "tidrx", address(idrx));
+        vm.serializeAddress(key, "tidrx", address(token)); // nama field lama; berisi token pembayaran (tIDRX atau IDRX)
         vm.serializeAddress(key, "operator", fk.operator());
-        vm.serializeAddress(key, "minter", minter == address(0) ? fk.operator() : minter);
+        vm.serializeAddress(key, "minter", tokenAda != address(0) ? address(0) : minter == address(0) ? fk.operator() : minter);
         vm.serializeAddress(key, "tokoA", tokoA);
         vm.serializeAddress(key, "tokoB", tokoB);
         vm.serializeUint(key, "batasAntre", batasAntre);
@@ -77,7 +86,7 @@ contract Deploy is Script {
         string memory json = vm.serializeUint(key, "chainId", block.chainid);
         string memory path = string.concat(vm.projectRoot(), "/deployments/", vm.toString(block.chainid), ".json");
         vm.writeJson(json, path);
-        console.log("TestIDRX (simulasi):", address(idrx));
+        console.log(tokenAda == address(0) ? "TestIDRX (simulasi):" : "Token pembayaran:", address(token));
         console.log("FotokopiKilat:", address(fk));
         console.log("ditulis ke:", path);
     }

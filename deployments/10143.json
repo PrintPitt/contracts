@@ -3,11 +3,11 @@
   "batasJemput": 600,
   "batasSengketa": 86400,
   "chainId": 10143,
-  "fotokopiKilat": "0x08b700EEcbabcfFBe53c0dAbe4C2acF9aF4dc959",
+  "fotokopiKilat": "0x24b045E3B4155232F81c709dF3DD43595a5C5101",
   "minter": "0x382D1cfe4036f977C1d7A4ecF8B81E1e67F89e7d",
   "operator": "0xf94e039dc723De798F065cFC3202Eedb040D8415",
   "platformFeeBps": 300,
-  "tidrx": "0x6F11E9dd404AF78522DAb5104fF0b6153c7E4841",
+  "tidrx": "0xcCf26C3b02a610fB87327f41a13384aF8ff57F45",
   "tokoA": "0xD9B470dd86E9876B59Ec4CCd797811D5a8f293e0",
   "tokoB": "0x8B0a62CA2523E33a1B51E28069613f6039Ea1c7F",
   "treasury": "0x1D3a9498F7e32661f3729677d0D773b40F70EAF4"

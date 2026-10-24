@@ -94,7 +94,7 @@ contract FotokopiKilatTest is Test {
     }
 
     function _orderAktif(address t) internal view returns (uint64 a) {
-        (, a,) = fk.toko(t);
+        (,, a,) = fk.toko(t);
     }
 
     function _bal(address a) internal view returns (uint256) {
@@ -159,12 +159,52 @@ contract FotokopiKilatTest is Test {
         fk.registerShop(tokoA, "Lagi");
         vm.expectRevert(FotokopiKilat.BadText.selector);
         fk.registerShop(makeAddr("x"), "Toko \"A\"");
-        for (uint256 i = 2; i < fk.MAX_TOKO(); ++i) {
-            fk.registerShop(address(uint160(0x1000 + i)), "T");
-        }
-        vm.expectRevert(FotokopiKilat.TooManyShops.selector);
-        fk.registerShop(makeAddr("kesembilan"), "T");
+        for (uint256 i = 0; i < 20; ++i) fk.registerShop(address(uint160(0x1000 + i)), "T"); // tanpa batas 8 toko
         vm.stopPrank();
+        assertEq(fk.jumlahToko(), 22);
+    }
+
+    function test_TokoDaftarSendiri() public {
+        address tokoC = makeAddr("tokoC");
+        vm.expectEmit(true, false, false, true);
+        emit FotokopiKilat.ShopRegistered(tokoC, "Fotokopi Barokah");
+        vm.prank(tokoC);
+        fk.daftarkanToko("Fotokopi Barokah");
+        (bool terdaftar, bool aktif,, string memory nama) = fk.toko(tokoC);
+        assertTrue(terdaftar && aktif);
+        assertEq(nama, "Fotokopi Barokah");
+        vm.prank(tokoC);
+        vm.expectRevert(FotokopiKilat.ShopExists.selector);
+        fk.daftarkanToko("Lagi");
+        vm.prank(tokoC);
+        fk.ubahNamaToko("Barokah Copy Center");
+        (,,, nama) = fk.toko(tokoC);
+        assertEq(nama, "Barokah Copy Center");
+        vm.prank(pelanggan);
+        vm.expectRevert(FotokopiKilat.NotShop.selector);
+        fk.ubahNamaToko("X");
+        uint64 id = _pesan(1);
+        vm.prank(tokoC);
+        fk.claim(id); // toko yang daftar sendiri langsung bisa rebutan
+    }
+
+    function test_TokoDinonaktifkan() public {
+        vm.prank(pelanggan);
+        vm.expectRevert(FotokopiKilat.NotOperator.selector);
+        fk.setTokoAktif(tokoA, false);
+        vm.prank(operator);
+        fk.setTokoAktif(tokoA, false);
+        uint64 id = _pesan(1);
+        vm.prank(tokoA);
+        vm.expectRevert(FotokopiKilat.ShopInactive.selector);
+        fk.claim(id);
+        vm.prank(operator);
+        fk.setTokoAktif(tokoA, true);
+        vm.prank(tokoA);
+        fk.claim(id);
+        vm.prank(operator);
+        vm.expectRevert(FotokopiKilat.NotShop.selector);
+        fk.setTokoAktif(pelanggan, true);
     }
 
     function test_Sesi() public {
