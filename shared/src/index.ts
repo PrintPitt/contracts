@@ -52,19 +52,21 @@ export const domainTidrx = (chainId: number, verifyingContract: `0x${string}`) =
   ({ name: 'Test IDRX (simulasi)', version: '1', chainId, verifyingContract }) as const;
 
 /**
- * Gas limit per fungsi. Monad menagih gas LIMIT, bukan gas terpakai, jadi jangan pakai estimasi + buffer besar.
- * Terukur di Monad testnet 2026-10-24 (gasUsed, +~30%): mint 89.618, approve 52.937, createOrder 204.453, expire 71.781.
- * `expire` di testnet ~31% lebih mahal dari EVM lokal (54.865), jadi yang belum terukur (claim, completeStep,
- * createOrderFor) = maks. lokal × 1,31 × 1,3. Ukur ulang begitu wallet toko/relayer berisi MON (BLZ-07.T4).
+ * Gas limit per fungsi. Monad menagih gas LIMIT (receipt `gasUsed` = limit), jadi buffer besar = bayar lebih mahal.
+ * Kebutuhan asli dari `eth_estimateGas` di Monad testnet 2026-10-24 (kasus terberat):
+ *   createOrderFor + permit + teks 40 byte 378.901 · createOrder teks 3 byte 204.453 (teks 40 byte ±+66k)
+ *   completeStep langkah terakhir (payout + NFT) 208.134 · expire 71.781 · mint ke alamat baru 72.550
+ *   claim 55.530 · approve 52.937
+ * Limit = kebutuhan terberat + ~12–15%. completeStep untuk resep 2 langkah belum diukur, diberi buffer lebih.
  */
 export const GAS_LIMIT = {
-  createOrder: 270_000n,
-  createOrderFor: 490_000n,
-  approve: 70_000n,
-  mint: 120_000n,
-  claim: 80_000n,
-  completeStep: 270_000n,
-  expire: 95_000n,
+  createOrder: 310_000n,
+  createOrderFor: 430_000n,
+  approve: 62_000n,
+  mint: 85_000n,
+  claim: 65_000n,
+  completeStep: 260_000n,
+  expire: 85_000n,
 } as const;
 
 /** Validasi teks persis seperti `_teksValid` di contract: 1..40 byte ASCII cetak, tanpa < > & " ' \ */
