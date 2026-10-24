@@ -19,12 +19,30 @@ export const fotokopiKilatAbi = [
         "internalType": "uint32"
       },
       {
+        "name": "batasJemput_",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
         "name": "token_",
         "type": "address",
         "internalType": "contract IERC20"
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -35,6 +53,19 @@ export const fotokopiKilatAbi = [
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_HALAMAN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "stateMutability": "view"
@@ -143,6 +174,19 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "function",
+    "name": "batasJemput",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "claim",
     "inputs": [
       {
@@ -185,6 +229,21 @@ export const fotokopiKilatAbi = [
         "name": "teks",
         "type": "string",
         "internalType": "string"
+      },
+      {
+        "name": "halaman",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "dokumen",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "kodeHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
@@ -219,6 +278,21 @@ export const fotokopiKilatAbi = [
             "name": "teks",
             "type": "string",
             "internalType": "string"
+          },
+          {
+            "name": "halaman",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "dokumen",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "kodeHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
           },
           {
             "name": "deadline",
@@ -463,12 +537,22 @@ export const fotokopiKilatAbi = [
             "internalType": "enum FotokopiKilat.Status"
           },
           {
+            "name": "halaman",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
             "name": "dibuatPada",
             "type": "uint40",
             "internalType": "uint40"
           },
           {
             "name": "diclaimPada",
+            "type": "uint40",
+            "internalType": "uint40"
+          },
+          {
+            "name": "siapPada",
             "type": "uint40",
             "internalType": "uint40"
           },
@@ -488,11 +572,50 @@ export const fotokopiKilatAbi = [
             "internalType": "uint32"
           },
           {
+            "name": "dokumen",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "kodeHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
             "name": "teks",
             "type": "string",
             "internalType": "string"
           }
         ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hargaUntuk",
+    "inputs": [
+      {
+        "name": "jenis",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "halaman",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "harga",
+        "type": "uint96",
+        "internalType": "uint96"
+      },
+      {
+        "name": "batasKerja",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -546,12 +669,22 @@ export const fotokopiKilatAbi = [
     ],
     "outputs": [
       {
-        "name": "harga",
+        "name": "hargaDasar",
         "type": "uint96",
         "internalType": "uint96"
       },
       {
-        "name": "batasKerja",
+        "name": "hargaPerHalaman",
+        "type": "uint96",
+        "internalType": "uint96"
+      },
+      {
+        "name": "batasDasar",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "batasPerHalaman",
         "type": "uint32",
         "internalType": "uint32"
       },
@@ -577,6 +710,19 @@ export const fotokopiKilatAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "komplain",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -686,90 +832,6 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "function",
-    "name": "order",
-    "inputs": [
-      {
-        "name": "id",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "pelanggan",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "harga",
-        "type": "uint96",
-        "internalType": "uint96"
-      },
-      {
-        "name": "toko",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "jenis",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "langkah",
-        "type": "bytes4",
-        "internalType": "bytes4"
-      },
-      {
-        "name": "jumlahLangkah",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "langkahSelesai",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "status",
-        "type": "uint8",
-        "internalType": "enum FotokopiKilat.Status"
-      },
-      {
-        "name": "dibuatPada",
-        "type": "uint40",
-        "internalType": "uint40"
-      },
-      {
-        "name": "diclaimPada",
-        "type": "uint40",
-        "internalType": "uint40"
-      },
-      {
-        "name": "batasKerja",
-        "type": "uint32",
-        "internalType": "uint32"
-      },
-      {
-        "name": "sesi",
-        "type": "uint32",
-        "internalType": "uint32"
-      },
-      {
-        "name": "kerja",
-        "type": "uint32",
-        "internalType": "uint32"
-      },
-      {
-        "name": "teks",
-        "type": "string",
-        "internalType": "string"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "ownerOf",
     "inputs": [
       {
@@ -829,6 +891,24 @@ export const fotokopiKilatAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "putuskan",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "bagianToko",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -901,6 +981,24 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "function",
+    "name": "serahkan",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "rahasia",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "sesiAktif",
     "inputs": [],
     "outputs": [
@@ -966,12 +1064,22 @@ export const fotokopiKilatAbi = [
         "internalType": "uint8"
       },
       {
-        "name": "harga",
+        "name": "hargaDasar",
         "type": "uint96",
         "internalType": "uint96"
       },
       {
-        "name": "batasKerja",
+        "name": "hargaPerHalaman",
+        "type": "uint96",
+        "internalType": "uint96"
+      },
+      {
+        "name": "batasDasar",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "batasPerHalaman",
         "type": "uint32",
         "internalType": "uint32"
       },
@@ -1164,6 +1272,37 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "event",
+    "name": "DisputeResolved",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "toko",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "payout",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "refund",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "EIP712DomainChanged",
     "inputs": [],
     "anonymous": false
@@ -1192,13 +1331,25 @@ export const fotokopiKilatAbi = [
         "internalType": "uint8"
       },
       {
-        "name": "harga",
+        "name": "hargaDasar",
         "type": "uint96",
         "indexed": false,
         "internalType": "uint96"
       },
       {
-        "name": "batasKerja",
+        "name": "hargaPerHalaman",
+        "type": "uint96",
+        "indexed": false,
+        "internalType": "uint96"
+      },
+      {
+        "name": "batasDasar",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "batasPerHalaman",
         "type": "uint32",
         "indexed": false,
         "internalType": "uint32"
@@ -1294,6 +1445,56 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "event",
+    "name": "OrderDetail",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "halaman",
+        "type": "uint16",
+        "indexed": false,
+        "internalType": "uint16"
+      },
+      {
+        "name": "batasKerja",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "dokumen",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "kodeHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OrderDisputed",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OrderExpired",
     "inputs": [
       {
@@ -1350,6 +1551,49 @@ export const fotokopiKilatAbi = [
         "type": "uint32",
         "indexed": false,
         "internalType": "uint32"
+      },
+      {
+        "name": "diserahkan",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OrderReady",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "toko",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "kerja",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "payout",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "siapPada",
+        "type": "uint40",
+        "indexed": false,
+        "internalType": "uint40"
       }
     ],
     "anonymous": false
@@ -1499,12 +1743,27 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "error",
+    "name": "BadCode",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadKind",
     "inputs": []
   },
   {
     "type": "error",
+    "name": "BadPages",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadRecipe",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadShare",
     "inputs": []
   },
   {
@@ -1674,12 +1933,27 @@ export const fotokopiKilatAbi = [
   },
   {
     "type": "error",
+    "name": "NotCustomer",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotDisputed",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotExpired",
     "inputs": []
   },
   {
     "type": "error",
     "name": "NotOperator",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotReady",
     "inputs": []
   },
   {
@@ -1748,6 +2022,11 @@ export const fotokopiKilatAbi = [
         "internalType": "string"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "TooLate",
+    "inputs": []
   },
   {
     "type": "error",
@@ -2552,14 +2831,15 @@ export const tidrxAbi = [
 
 export const deployments = {
   "10143": {
-    "address": "0x346c1fB782847Ce9f672C52dB26E0DBb953a679f",
-    "tidrx": "0x3E890eFBC4089df436589D4c3f5e356afed82322",
+    "address": "0xA2a56061f16919a2cFF2a4941db467BDe86B88aa",
+    "tidrx": "0x7C187352Ce1Bf0137aC72b876d0D4e119dBcA8E3",
     "minter": "0x382D1cfe4036f977C1d7A4ecF8B81E1e67F89e7d",
     "operator": "0xf94e039dc723De798F065cFC3202Eedb040D8415",
     "tokoA": "0xD9B470dd86E9876B59Ec4CCd797811D5a8f293e0",
     "tokoB": "0x8B0a62CA2523E33a1B51E28069613f6039Ea1c7F",
     "batasAntre": 45,
-    "deployBlock": 73719650
+    "batasJemput": 600,
+    "deployBlock": 73733847
   },
   "31337": {
     "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
@@ -2569,6 +2849,7 @@ export const deployments = {
     "tokoA": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
     "tokoB": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
     "batasAntre": 45,
-    "deployBlock": 1
+    "batasJemput": 600,
+    "deployBlock": 2
   }
 } as const;

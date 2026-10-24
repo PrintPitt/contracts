@@ -36,6 +36,7 @@ for (const f of readdirSync(`${root}deployments`).filter((f) => f.endsWith('.jso
     tokoA: d.tokoA,
     tokoB: d.tokoB,
     batasAntre: d.batasAntre,
+    batasJemput: d.batasJemput ?? null,
     deployBlock,
   };
 }

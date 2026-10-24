@@ -11,11 +11,13 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
-/// @title FotokopiKilat (nama kerja)
-/// @notice Toko fotokopi on-chain: pelanggan memesan dan membayar ke escrow dalam token Rupiah (tIDRX di testnet),
-/// toko rebutan order lalu mengerjakannya langkah demi langkah. Langkah terakhir membayar toko sesuai kecepatan,
-/// mengembalikan sisa ke pelanggan, dan mencetak NFT hasil cetakan. Pelanggan tanpa MON bisa memesan lewat relayer
-/// (tanda tangan EIP-712 + permit), fee relayer dipotong dalam token. Spesifikasi: vault/04-Architecture/Desain Contract.md
+/// @title FotokopiKilat v2 (nama kerja; repo PrintPitt)
+/// @notice Order cetak nyata yang di-gamify: pelanggan memesan (jenis, jumlah halaman, hash dokumen terenkripsi) dan
+/// membayar ke escrow dalam token Rupiah (tIDRX di testnet); toko rebutan order lalu mengerjakannya langkah demi
+/// langkah. Payout turun per detik sampai toko menandai siap; sisanya jadi cashback pelanggan. Dana cair saat serah
+/// terima: toko memindai QR rahasia pelanggan (`kodeHash` di order). Order tanpa `kodeHash` (mode demo mini-game)
+/// langsung selesai di langkah terakhir. Pelanggan tanpa MON bisa memesan lewat relayer (EIP-712 + permit).
+/// Spesifikasi: vault/04-Architecture/Desain Contract.md
 contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     using Strings for uint256;
     using SafeERC20 for IERC20;
@@ -26,8 +28,11 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         None,
         Open,
         Claimed,
+        Siap, // langkah terakhir selesai, payout terkunci, menunggu serah terima
         Finished,
-        Expired
+        Expired,
+        Sengketa, // pelanggan komplain saat Siap, menunggu keputusan operator
+        Diputuskan
     }
 
     enum AlasanExpire {
@@ -35,9 +40,13 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         Kerja
     }
 
+    /// @notice Harga = hargaDasar + hargaPerHalaman × halaman; batas kerja = batasDasar + batasPerHalaman × halaman.
+    /// Nominal dalam satuan terkecil token (tIDRX 2 desimal: Rp5.000 = 500000), batas dalam detik.
     struct Katalog {
-        uint96 harga; // dalam satuan terkecil token (tIDRX 2 desimal: Rp5.000 = 500000)
-        uint32 batasKerja;
+        uint96 hargaDasar;
+        uint96 hargaPerHalaman;
+        uint32 batasDasar;
+        uint32 batasPerHalaman;
         bytes4 langkah;
         uint8 jumlahLangkah;
         bool aktif;
@@ -59,11 +68,15 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         uint8 jumlahLangkah;
         uint8 langkahSelesai;
         Status status;
+        uint16 halaman;
         uint40 dibuatPada;
         uint40 diclaimPada;
+        uint40 siapPada;
         uint32 batasKerja;
         uint32 sesi;
-        uint32 kerja;
+        uint32 kerja; // detik dari claim sampai siap
+        bytes32 dokumen; // hash dokumen terenkripsi off-chain (0 = tanpa dokumen, mode demo)
+        bytes32 kodeHash; // keccak256(rahasia QR pelanggan); 0 = tanpa serah terima
         string teks;
     }
 
@@ -72,6 +85,9 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         address pelanggan;
         uint8 jenis;
         string teks;
+        uint16 halaman;
+        bytes32 dokumen;
+        bytes32 kodeHash;
         uint256 deadline;
         uint256 maxFee;
     }
@@ -91,9 +107,11 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     uint256 public constant MAX_TOKO = 8;
     uint256 public constant MAX_LANGKAH = 4;
     uint8 public constant LANGKAH_TERTINGGI = 3; // 1 Fotokopi, 2 Print, 3 Laminating
+    uint16 public constant MAX_HALAMAN = 500;
+    uint16 public constant BPS = 10_000;
 
     bytes32 public constant PESANAN_TYPEHASH = keccak256(
-        "Pesanan(address pelanggan,uint8 jenis,string teks,uint256 nonce,uint256 deadline,uint256 maxFee)"
+        "Pesanan(address pelanggan,uint8 jenis,string teks,uint16 halaman,bytes32 dokumen,bytes32 kodeHash,uint256 nonce,uint256 deadline,uint256 maxFee)"
     );
 
     // ---------------------------------------------------------------- state
@@ -101,6 +119,7 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     IERC20 public immutable token;
     address public immutable operator;
     uint32 public immutable batasAntre;
+    uint32 public immutable batasJemput; // detik setelah Siap; lewat itu order bisa ditutup tanpa serah terima
 
     uint32 public sesiId;
     bool public sesiAktif;
@@ -111,12 +130,21 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     mapping(address alamat => Toko) public toko;
     address[] public daftarToko;
     mapping(uint32 sesi => mapping(address toko => uint256)) public omzet;
-    mapping(uint64 id => Order) public order;
+    mapping(uint64 id => Order) internal order; // dibaca lewat getOrder (getter otomatis 18 nilai = stack too deep)
     mapping(address pelanggan => uint256) public nonces;
 
     // --------------------------------------------------------------- event
 
-    event KatalogSet(uint8 indexed jenis, uint96 harga, uint32 batasKerja, bytes4 langkah, uint8 jumlahLangkah, string label);
+    event KatalogSet(
+        uint8 indexed jenis,
+        uint96 hargaDasar,
+        uint96 hargaPerHalaman,
+        uint32 batasDasar,
+        uint32 batasPerHalaman,
+        bytes4 langkah,
+        uint8 jumlahLangkah,
+        string label
+    );
     event ShopRegistered(address indexed toko, string nama);
     event SessionStarted(uint32 indexed sesiId, uint40 waktu);
     event SessionEnded(uint32 indexed sesiId, uint40 waktu);
@@ -124,11 +152,17 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     event OrderCreated(
         uint64 indexed id, address indexed pelanggan, uint8 jenis, uint96 harga, string teks, uint40 dibuatPada
     );
+    /// @notice Rincian order v2, dipancarkan tepat setelah OrderCreated.
+    event OrderDetail(uint64 indexed id, uint16 halaman, uint32 batasKerja, bytes32 dokumen, bytes32 kodeHash);
     event OrderRelayed(uint64 indexed id, address indexed relayer, uint256 fee);
     event OrderClaimed(uint64 indexed id, address indexed toko, uint40 diclaimPada);
     event StepCompleted(uint64 indexed id, address indexed toko, uint8 urutan, uint8 kode);
-    event OrderFinished(uint64 indexed id, address indexed toko, uint256 payout, uint256 refund, uint32 kerja);
+    event OrderReady(uint64 indexed id, address indexed toko, uint32 kerja, uint256 payout, uint40 siapPada);
+    /// @param diserahkan true bila lewat QR pelanggan (atau order tanpa kode); false bila ditutup setelah batasJemput
+    event OrderFinished(uint64 indexed id, address indexed toko, uint256 payout, uint256 refund, uint32 kerja, bool diserahkan);
     event OrderExpired(uint64 indexed id, uint256 refund, AlasanExpire alasan);
+    event OrderDisputed(uint64 indexed id);
+    event DisputeResolved(uint64 indexed id, address indexed toko, uint256 payout, uint256 refund);
 
     // --------------------------------------------------------------- error
 
@@ -153,6 +187,13 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     error SignatureExpired();
     error BadSignature();
     error FeeTooHigh();
+    error BadPages();
+    error NotReady();
+    error BadCode();
+    error NotCustomer();
+    error TooLate();
+    error NotDisputed();
+    error BadShare();
 
     // ----------------------------------------------------------- modifier
 
@@ -161,25 +202,34 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         _;
     }
 
-    constructor(string memory nama_, string memory simbol_, uint32 batasAntre_, IERC20 token_)
+    constructor(string memory nama_, string memory simbol_, uint32 batasAntre_, uint32 batasJemput_, IERC20 token_)
         ERC721(nama_, simbol_)
-        EIP712("FotokopiKilat", "1")
+        EIP712("FotokopiKilat", "2")
     {
-        if (batasAntre_ == 0 || address(token_) == address(0)) revert BadValue();
+        if (batasAntre_ == 0 || batasJemput_ == 0 || address(token_) == address(0)) revert BadValue();
         operator = msg.sender;
         batasAntre = batasAntre_;
+        batasJemput = batasJemput_;
         token = token_;
     }
 
     // --------------------------------------------------------------- admin
 
     /// @param langkah kode langkah berurutan, tiap kode 1..LANGKAH_TERTINGGI
-    function setKatalog(uint8 jenis, uint96 harga, uint32 batasKerja, uint8[] calldata langkah, string calldata label)
-        external
-        onlyOperator
-    {
+    function setKatalog(
+        uint8 jenis,
+        uint96 hargaDasar,
+        uint96 hargaPerHalaman,
+        uint32 batasDasar,
+        uint32 batasPerHalaman,
+        uint8[] calldata langkah,
+        string calldata label
+    ) external onlyOperator {
         if (jenis == 0) revert BadKind();
-        if (harga == 0 || batasKerja == 0) revert BadValue();
+        if (uint256(hargaDasar) + hargaPerHalaman == 0 || uint256(batasDasar) + batasPerHalaman == 0) revert BadValue();
+        // order terbesar (MAX_HALAMAN) harus muat di uint96 / uint32
+        if (uint256(hargaDasar) + uint256(hargaPerHalaman) * MAX_HALAMAN > type(uint96).max) revert BadValue();
+        if (uint256(batasDasar) + uint256(batasPerHalaman) * MAX_HALAMAN > type(uint32).max) revert BadValue();
         uint256 n = langkah.length;
         if (n == 0 || n > MAX_LANGKAH) revert BadRecipe();
         if (!_teksValid(bytes(label))) revert BadText();
@@ -190,8 +240,9 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
             if (kode == 0 || kode > LANGKAH_TERTINGGI) revert BadRecipe();
             packed |= uint32(kode) << uint32(8 * (3 - i));
         }
-        katalog[jenis] = Katalog(harga, batasKerja, bytes4(packed), uint8(n), true, label);
-        emit KatalogSet(jenis, harga, batasKerja, bytes4(packed), uint8(n), label);
+        katalog[jenis] =
+            Katalog(hargaDasar, hargaPerHalaman, batasDasar, batasPerHalaman, bytes4(packed), uint8(n), true, label);
+        emit KatalogSet(jenis, hargaDasar, hargaPerHalaman, batasDasar, batasPerHalaman, bytes4(packed), uint8(n), label);
     }
 
     function setFeeRelay(uint96 fee) external onlyOperator {
@@ -224,10 +275,16 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
     // ----------------------------------------------------------- pelanggan
 
     /// @notice Pesan langsung (pelanggan membayar gas sendiri dan sudah `approve` token ke contract).
-    function createOrder(uint8 jenis, string calldata teks) external nonReentrant returns (uint64 id) {
-        uint96 harga = _cekPesanan(jenis, teks);
+    /// @param dokumen hash dokumen terenkripsi (0 = tanpa dokumen) · @param kodeHash keccak256(rahasia QR) (0 = tanpa serah terima)
+    function createOrder(uint8 jenis, string calldata teks, uint16 halaman, bytes32 dokumen, bytes32 kodeHash)
+        external
+        nonReentrant
+        returns (uint64 id)
+    {
+        (uint96 harga, uint32 batas) = _cekPesanan(jenis, teks, halaman);
         token.safeTransferFrom(msg.sender, address(this), harga);
-        id = _buatOrder(msg.sender, jenis, harga, teks);
+        id = _buatOrder(msg.sender, jenis, teks, harga, batas);
+        _simpanDetail(id, halaman, batas, dokumen, kodeHash);
     }
 
     /// @notice Pesan atas nama pelanggan tanpa MON: pelanggan menandatangani `Pesanan` (EIP-712) dan `permit` token;
@@ -240,13 +297,8 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         if (block.timestamp > p.deadline) revert SignatureExpired();
         uint96 fee = feeRelay;
         if (fee > p.maxFee) revert FeeTooHigh();
-        uint96 harga = _cekPesanan(p.jenis, p.teks);
-
-        uint256 nonce = nonces[p.pelanggan]++;
-        bytes32 digest = _hashTypedDataV4(
-            keccak256(abi.encode(PESANAN_TYPEHASH, p.pelanggan, p.jenis, keccak256(bytes(p.teks)), nonce, p.deadline, p.maxFee))
-        );
-        if (ECDSA.recover(digest, sig) != p.pelanggan) revert BadSignature();
+        (uint96 harga, uint32 batas) = _cekPesanan(p.jenis, p.teks, p.halaman);
+        if (ECDSA.recover(_digestPesanan(p, nonces[p.pelanggan]++), sig) != p.pelanggan) revert BadSignature();
 
         // permit bisa sudah dipakai (front-run) — allowance tetap dicek oleh transferFrom di bawah
         if (izin.deadline != 0) {
@@ -258,8 +310,19 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         // forge-lint: disable-next-line(arbitrary-send-erc20)
         if (fee != 0) token.safeTransferFrom(p.pelanggan, msg.sender, fee);
 
-        id = _buatOrder(p.pelanggan, p.jenis, harga, p.teks);
+        id = _buatOrder(p.pelanggan, p.jenis, p.teks, harga, batas);
+        _simpanDetail(id, p.halaman, batas, p.dokumen, p.kodeHash);
         emit OrderRelayed(id, msg.sender, fee);
+    }
+
+    /// @notice Pelanggan menolak hasil saat order Siap (sebelum batasJemput): dana ditahan sampai operator memutuskan.
+    function komplain(uint64 id) external {
+        Order storage o = order[id];
+        if (o.status != Status.Siap) revert NotReady();
+        if (msg.sender != o.pelanggan) revert NotCustomer();
+        if (block.timestamp >= uint256(o.siapPada) + batasJemput) revert TooLate();
+        o.status = Status.Sengketa;
+        emit OrderDisputed(id);
     }
 
     // ---------------------------------------------------------------- toko
@@ -291,14 +354,60 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
 
         o.langkahSelesai = urutan + 1;
         emit StepCompleted(id, msg.sender, urutan, kode);
-        if (urutan + 1 == o.jumlahLangkah) _selesaikan(id, o, kerja);
+        if (urutan + 1 != o.jumlahLangkah) return;
+
+        // Langkah terakhir: waktu kerja dan payout terkunci; toko bebas mengambil order lain.
+        o.kerja = uint32(kerja);
+        toko[msg.sender].orderAktif = 0;
+        if (o.kodeHash == bytes32(0)) {
+            _selesaikan(id, o, true);
+        } else {
+            o.status = Status.Siap;
+            o.siapPada = uint40(block.timestamp);
+            emit OrderReady(id, msg.sender, uint32(kerja), _payout(o.harga, o.batasKerja, kerja), uint40(block.timestamp));
+        }
+    }
+
+    /// @notice Serah terima: toko memindai QR pelanggan berisi `rahasia`; dana cair dan NFT dicetak.
+    function serahkan(uint64 id, bytes32 rahasia) external nonReentrant {
+        Order storage o = order[id];
+        if (o.status != Status.Siap) revert NotReady();
+        if (o.toko != msg.sender) revert NotYourOrder();
+        if (keccak256(abi.encodePacked(rahasia)) != o.kodeHash) revert BadCode();
+        _selesaikan(id, o, true);
+    }
+
+    // ------------------------------------------------------------- operator
+
+    /// @notice Putuskan sengketa: toko menerima `bagianToko` (basis poin) dari payout yang terkunci saat Siap,
+    /// sisanya kembali ke pelanggan. Order sengketa tidak mendapat NFT.
+    function putuskan(uint64 id, uint16 bagianToko) external onlyOperator nonReentrant {
+        Order storage o = order[id];
+        if (o.status != Status.Sengketa) revert NotDisputed();
+        if (bagianToko > BPS) revert BadShare();
+        uint256 harga = o.harga;
+        uint256 payout = _payout(harga, o.batasKerja, o.kerja) * bagianToko / BPS;
+        uint256 refund = harga - payout;
+        address t = o.toko;
+        o.status = Status.Diputuskan;
+        omzet[o.sesi][t] += payout;
+        emit DisputeResolved(id, t, payout, refund);
+        if (payout != 0) token.safeTransfer(t, payout);
+        if (refund != 0) token.safeTransfer(o.pelanggan, refund);
     }
 
     // --------------------------------------------------------- siapa saja
 
+    /// @notice Dipanggil keeper/siapa saja. Open lewat batas antre atau Claimed lewat batas kerja: refund penuh.
+    /// Siap lewat batasJemput: ditutup tanpa serah terima (toko tetap dibayar karena pekerjaan sudah siap).
     function expire(uint64 id) external nonReentrant {
         Order storage o = order[id];
         AlasanExpire alasan;
+        if (o.status == Status.Siap) {
+            if (block.timestamp < uint256(o.siapPada) + batasJemput) revert NotExpired();
+            _selesaikan(id, o, false);
+            return;
+        }
         if (o.status == Status.Open) {
             if (block.timestamp < uint256(o.dibuatPada) + batasAntre) revert NotExpired();
             alasan = AlasanExpire.Antre;
@@ -341,14 +450,21 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         }
     }
 
+    /// @notice Harga dan batas kerja untuk `halaman` halaman jenis ini (sama dengan yang ditarik saat memesan).
+    function hargaUntuk(uint8 jenis, uint16 halaman) external view returns (uint96 harga, uint32 batasKerja) {
+        return _hitung(katalog[jenis], halaman);
+    }
+
     /// @notice Kode langkah ke-`urutan` dari resep katalog.
     function langkahKatalog(uint8 jenis, uint8 urutan) external view returns (uint8) {
         return uint8(katalog[jenis].langkah[urutan]);
     }
 
-    /// @notice Payout bila langkah terakhir selesai sekarang (0 bila sudah lewat batas). Dipakai FE untuk cek.
+    /// @notice Payout bila langkah terakhir selesai sekarang (0 bila sudah lewat batas); untuk order Siap/Sengketa
+    /// mengembalikan payout yang sudah terkunci. Dipakai FE untuk cek.
     function payoutSekarang(uint64 id) external view returns (uint256) {
         Order storage o = order[id];
+        if (o.status == Status.Siap || o.status == Status.Sengketa) return _payout(o.harga, o.batasKerja, o.kerja);
         if (o.status != Status.Claimed) return 0;
         uint256 kerja = block.timestamp - o.diclaimPada;
         if (kerja >= o.batasKerja) return 0;
@@ -368,7 +484,9 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
             toko[o.toko].nama,
             '","attributes":[{"trait_type":"Toko","value":"',
             toko[o.toko].nama,
-            '"},{"trait_type":"Waktu kerja (dtk)","display_type":"number","value":',
+            '"},{"trait_type":"Halaman","display_type":"number","value":',
+            uint256(o.halaman).toString(),
+            '},{"trait_type":"Waktu kerja (dtk)","display_type":"number","value":',
             uint256(o.kerja).toString(),
             '}],"image":"data:image/svg+xml;base64,',
             Base64.encode(bytes(_svg(tokenId, o, label))),
@@ -379,15 +497,58 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
 
     // ------------------------------------------------------------ internal
 
-    function _cekPesanan(uint8 jenis, string calldata teks) private view returns (uint96 harga) {
+    function _cekPesanan(uint8 jenis, string calldata teks, uint16 halaman)
+        private
+        view
+        returns (uint96 harga, uint32 batas)
+    {
         if (!sesiAktif) revert SessionClosed();
         Katalog storage k = katalog[jenis];
         if (!k.aktif) revert BadKind();
         if (!_teksValid(bytes(teks))) revert BadText();
-        harga = k.harga;
+        if (halaman == 0 || halaman > MAX_HALAMAN) revert BadPages();
+        (harga, batas) = _hitung(k, halaman);
     }
 
-    function _buatOrder(address pelanggan, uint8 jenis, uint96 harga, string calldata teks) private returns (uint64 id) {
+    function _hitung(Katalog storage k, uint16 halaman) private view returns (uint96, uint32) {
+        // setKatalog menjamin hasilnya muat untuk halaman <= MAX_HALAMAN
+        return (
+            uint96(uint256(k.hargaDasar) + uint256(k.hargaPerHalaman) * halaman),
+            uint32(uint256(k.batasDasar) + uint256(k.batasPerHalaman) * halaman)
+        );
+    }
+
+    function _digestPesanan(Pesanan calldata p, uint256 nonce) private view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    PESANAN_TYPEHASH,
+                    p.pelanggan,
+                    p.jenis,
+                    keccak256(bytes(p.teks)),
+                    p.halaman,
+                    p.dokumen,
+                    p.kodeHash,
+                    nonce,
+                    p.deadline,
+                    p.maxFee
+                )
+            )
+        );
+    }
+
+    function _simpanDetail(uint64 id, uint16 halaman, uint32 batas, bytes32 dokumen, bytes32 kodeHash) private {
+        Order storage o = order[id];
+        o.halaman = halaman;
+        if (dokumen != bytes32(0)) o.dokumen = dokumen;
+        if (kodeHash != bytes32(0)) o.kodeHash = kodeHash;
+        emit OrderDetail(id, halaman, batas, dokumen, kodeHash);
+    }
+
+    function _buatOrder(address pelanggan, uint8 jenis, string calldata teks, uint96 harga, uint32 batas)
+        private
+        returns (uint64 id)
+    {
         Katalog storage k = katalog[jenis];
         id = nextId++;
         Order storage o = order[id];
@@ -398,25 +559,25 @@ contract FotokopiKilat is ERC721, EIP712, ReentrancyGuardTransient {
         o.jumlahLangkah = k.jumlahLangkah;
         o.status = Status.Open;
         o.dibuatPada = uint40(block.timestamp);
-        o.batasKerja = k.batasKerja;
+        o.batasKerja = batas;
         o.sesi = sesiId;
         o.teks = teks;
         emit OrderCreated(id, pelanggan, jenis, harga, teks, uint40(block.timestamp));
     }
 
-    function _selesaikan(uint64 id, Order storage o, uint256 kerja) private {
+    /// @dev Dipanggil saat langkah terakhir (tanpa kode), serah terima, atau batasJemput lewat. `o.kerja` sudah terkunci.
+    function _selesaikan(uint64 id, Order storage o, bool diserahkan) private {
         uint256 harga = o.harga;
+        uint32 kerja = o.kerja;
         uint256 payout = _payout(harga, o.batasKerja, kerja);
         uint256 refund = harga - payout;
         address t = o.toko;
         address p = o.pelanggan;
 
         o.status = Status.Finished;
-        o.kerja = uint32(kerja);
-        toko[t].orderAktif = 0;
         omzet[o.sesi][t] += payout;
         _mint(p, id);
-        emit OrderFinished(id, t, payout, refund, uint32(kerja));
+        emit OrderFinished(id, t, payout, refund, kerja, diserahkan);
 
         // Transfer ERC-20 tidak menjalankan kode penerima, jadi penerima tidak bisa memblokir order.
         if (payout != 0) token.safeTransfer(t, payout);

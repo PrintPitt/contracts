@@ -16,6 +16,9 @@ contract FotokopiKilatTest is Test {
     address relayer = makeAddr("relayer");
 
     uint32 constant ANTRE = 45;
+    uint32 constant JEMPUT = 600;
+    bytes32 constant DOK = keccak256("dokumen terenkripsi");
+    bytes32 constant RAHASIA = keccak256("rahasia QR pelanggan");
     uint96 constant H1 = 500_000; // Rp5.000 (tIDRX 2 desimal)
     uint96 constant H3 = 1_000_000; // Rp10.000
     uint96 constant FEE = 10_000; // Rp100
@@ -32,11 +35,13 @@ contract FotokopiKilatTest is Test {
         vm.warp(1_000_000);
         vm.startPrank(operator);
         idrx = new TestIDRX(operator);
-        fk = new FotokopiKilat("Fotokopi Kilat", "FKL", ANTRE, idrx);
-        fk.setKatalog(1, H1, 30, _resep1(FOTOKOPI), "FOTOKOPI KTP");
-        fk.setKatalog(2, H1, 30, _resep1(PRINT), "BOARDING PASS");
-        fk.setKatalog(3, H3, 45, _resep2(FOTOKOPI, LAMINATING), "LAMINATING IJAZAH");
-        fk.setKatalog(4, H3, 45, _resep2(PRINT, LAMINATING), "MENU WARUNG");
+        fk = new FotokopiKilat("Fotokopi Kilat", "FKL", ANTRE, JEMPUT, idrx);
+        fk.setKatalog(1, H1, 0, 30, 0, _resep1(FOTOKOPI), "FOTOKOPI KTP");
+        fk.setKatalog(2, H1, 0, 30, 0, _resep1(PRINT), "BOARDING PASS");
+        fk.setKatalog(3, H3, 0, 45, 0, _resep2(FOTOKOPI, LAMINATING), "LAMINATING IJAZAH");
+        fk.setKatalog(4, H3, 0, 45, 0, _resep2(PRINT, LAMINATING), "MENU WARUNG");
+        // Rp1.000 + Rp500/halaman, batas 20 dtk + 2 dtk/halaman
+        fk.setKatalog(5, 100_000, 50_000, 20, 2, _resep1(PRINT), "PRINT DOKUMEN");
         fk.setFeeRelay(FEE);
         fk.registerShop(tokoA, "Toko A");
         fk.registerShop(tokoB, "Toko B");
@@ -62,7 +67,24 @@ contract FotokopiKilatTest is Test {
 
     function _pesan(uint8 jenis) internal returns (uint64 id) {
         vm.prank(pelanggan);
-        id = fk.createOrder(jenis, "Skripsi Bab 1");
+        id = fk.createOrder(jenis, "Skripsi Bab 1", 1, bytes32(0), bytes32(0));
+    }
+
+    /// @dev Order nyata: dokumen + kode serah terima.
+    function _pesanKode(uint8 jenis, uint16 halaman) internal returns (uint64 id) {
+        vm.prank(pelanggan);
+        id = fk.createOrder(jenis, "Skripsi Bab 1", halaman, DOK, keccak256(abi.encodePacked(RAHASIA)));
+    }
+
+    /// @dev Claim + kerjakan semua langkah setelah `detik`; order berkode berhenti di Siap.
+    function _kerjakan(uint64 id, uint256 detik) internal {
+        vm.prank(tokoA);
+        fk.claim(id);
+        vm.warp(block.timestamp + detik);
+        FotokopiKilat.Order memory o = fk.getOrder(id);
+        vm.startPrank(tokoA);
+        for (uint256 i; i < o.jumlahLangkah; ++i) fk.completeStep(id, uint8(o.langkah[i]));
+        vm.stopPrank();
     }
 
     function _status(uint64 id) internal view returns (FotokopiKilat.Status) {
@@ -82,9 +104,11 @@ contract FotokopiKilatTest is Test {
     function test_AdminHanyaOperator() public {
         vm.startPrank(pelanggan);
         vm.expectRevert(FotokopiKilat.NotOperator.selector);
-        fk.setKatalog(5, H1, 30, _resep1(PRINT), "X");
+        fk.setKatalog(6, H1, 0, 30, 0, _resep1(PRINT), "X");
         vm.expectRevert(FotokopiKilat.NotOperator.selector);
         fk.registerShop(pelanggan, "X");
+        vm.expectRevert(FotokopiKilat.NotOperator.selector);
+        fk.putuskan(1, 0);
         vm.expectRevert(FotokopiKilat.NotOperator.selector);
         fk.startSession();
         vm.expectRevert(FotokopiKilat.NotOperator.selector);
@@ -97,19 +121,23 @@ contract FotokopiKilatTest is Test {
     function test_KatalogDivalidasi() public {
         vm.startPrank(operator);
         vm.expectRevert(FotokopiKilat.BadKind.selector);
-        fk.setKatalog(0, H1, 30, _resep1(PRINT), "X");
+        fk.setKatalog(0, H1, 0, 30, 0, _resep1(PRINT), "X");
         vm.expectRevert(FotokopiKilat.BadValue.selector);
-        fk.setKatalog(5, 0, 30, _resep1(PRINT), "X");
+        fk.setKatalog(6, 0, 0, 30, 0, _resep1(PRINT), "X");
         vm.expectRevert(FotokopiKilat.BadValue.selector);
-        fk.setKatalog(5, H1, 0, _resep1(PRINT), "X");
+        fk.setKatalog(6, H1, 0, 0, 0, _resep1(PRINT), "X");
+        vm.expectRevert(FotokopiKilat.BadValue.selector); // 500 halaman tidak muat di uint96
+        fk.setKatalog(6, 0, type(uint96).max / 400, 30, 0, _resep1(PRINT), "X");
+        vm.expectRevert(FotokopiKilat.BadValue.selector); // 500 halaman tidak muat di uint32
+        fk.setKatalog(6, H1, 0, 30, type(uint32).max / 400, _resep1(PRINT), "X");
         vm.expectRevert(FotokopiKilat.BadRecipe.selector);
-        fk.setKatalog(5, H1, 30, new uint8[](0), "X");
+        fk.setKatalog(6, H1, 0, 30, 0, new uint8[](0), "X");
         vm.expectRevert(FotokopiKilat.BadRecipe.selector);
-        fk.setKatalog(5, H1, 30, new uint8[](5), "X");
+        fk.setKatalog(6, H1, 0, 30, 0, new uint8[](5), "X");
         vm.expectRevert(FotokopiKilat.BadRecipe.selector);
-        fk.setKatalog(5, H1, 30, _resep1(4), "X");
+        fk.setKatalog(6, H1, 0, 30, 0, _resep1(4), "X");
         vm.expectRevert(FotokopiKilat.BadText.selector);
-        fk.setKatalog(5, H1, 30, _resep1(PRINT), "<b>");
+        fk.setKatalog(6, H1, 0, 30, 0, _resep1(PRINT), "<b>");
         vm.stopPrank();
     }
 
@@ -117,7 +145,7 @@ contract FotokopiKilatTest is Test {
         assertEq(fk.langkahKatalog(3, 0), FOTOKOPI);
         assertEq(fk.langkahKatalog(3, 1), LAMINATING);
         assertEq(fk.langkahKatalog(4, 0), PRINT);
-        (,,, uint8 n,,) = fk.katalog(4);
+        (,,,,, uint8 n,,) = fk.katalog(4);
         assertEq(n, 2);
     }
 
@@ -170,17 +198,24 @@ contract FotokopiKilatTest is Test {
         idrx.mint(tanpaIzin, SALDO);
         vm.prank(tanpaIzin);
         vm.expectRevert(); // ERC20InsufficientAllowance
-        fk.createOrder(1, "ok");
+        fk.createOrder(1, "ok", 1, 0, 0);
 
         vm.prank(pelanggan);
         vm.expectRevert(FotokopiKilat.BadKind.selector);
-        fk.createOrder(9, "ok");
+        fk.createOrder(9, "ok", 1, 0, 0);
+
+        vm.startPrank(pelanggan);
+        vm.expectRevert(FotokopiKilat.BadPages.selector);
+        fk.createOrder(1, "ok", 0, 0, 0);
+        vm.expectRevert(FotokopiKilat.BadPages.selector);
+        fk.createOrder(1, "ok", 501, 0, 0);
+        vm.stopPrank();
 
         vm.prank(operator);
         fk.endSession();
         vm.prank(pelanggan);
         vm.expectRevert(FotokopiKilat.SessionClosed.selector);
-        fk.createOrder(1, "ok");
+        fk.createOrder(1, "ok", 1, 0, 0);
     }
 
     function test_CreateOrder_TeksTidakValid() public {
@@ -197,10 +232,148 @@ contract FotokopiKilatTest is Test {
         vm.startPrank(pelanggan);
         for (uint256 i; i < buruk.length; ++i) {
             vm.expectRevert(FotokopiKilat.BadText.selector);
-            fk.createOrder(1, buruk[i]);
+            fk.createOrder(1, buruk[i], 1, 0, 0);
         }
-        fk.createOrder(1, "1234567890123456789012345678901234567890");
+        fk.createOrder(1, "1234567890123456789012345678901234567890", 1, 0, 0);
         vm.stopPrank();
+    }
+
+    // ======================================================== BLZ-24 harga per halaman + BLZ-21.T5 dokumen
+
+    function test_HargaDanBatasPerHalaman() public {
+        (uint96 harga, uint32 batas) = fk.hargaUntuk(5, 10);
+        assertEq(harga, 100_000 + 50_000 * 10); // Rp6.000
+        assertEq(batas, 20 + 2 * 10);
+        uint256 sebelum = _bal(pelanggan);
+        uint64 id = _pesanKode(5, 10);
+        assertEq(sebelum - _bal(pelanggan), harga, "ditarik sesuai hargaUntuk");
+        FotokopiKilat.Order memory o = fk.getOrder(id);
+        assertEq(o.harga, harga);
+        assertEq(o.batasKerja, batas);
+        assertEq(o.halaman, 10);
+        (harga, batas) = fk.hargaUntuk(5, 500);
+        assertEq(harga, 100_000 + 50_000 * 500);
+        assertEq(batas, 20 + 2 * 500);
+    }
+
+    function test_DokumenDanKodeTersimpan() public {
+        bytes32 kode = keccak256(abi.encodePacked(RAHASIA));
+        vm.expectEmit(true, false, false, true);
+        emit FotokopiKilat.OrderDetail(1, 3, 26, DOK, kode);
+        uint64 id = _pesanKode(5, 3);
+        FotokopiKilat.Order memory o = fk.getOrder(id);
+        assertEq(o.dokumen, DOK);
+        assertEq(o.kodeHash, kode);
+        assertEq(fk.getOrder(_pesan(1)).kodeHash, bytes32(0), "mode demo tanpa kode");
+    }
+
+    // ======================================================== BLZ-23 siap + serah terima
+
+    function test_Siap_PayoutTerkunciDanTokoBebas() public {
+        uint64 id = _pesanKode(1, 1);
+        _kerjakan(id, 10);
+        assertEq(uint8(_status(id)), uint8(FotokopiKilat.Status.Siap));
+        assertEq(_orderAktif(tokoA), 0, "toko bebas setelah siap");
+        assertEq(_bal(address(fk)), H1, "dana masih di escrow");
+        uint256 terkunci = fk.payoutSekarang(id);
+        assertEq(terkunci, uint256(H1) * 20 / 30);
+        vm.warp(block.timestamp + 300);
+        assertEq(fk.payoutSekarang(id), terkunci, "payout tidak turun setelah siap");
+        uint64 lain = _pesan(1);
+        vm.prank(tokoA);
+        fk.claim(lain);
+    }
+
+    function test_Serahkan() public {
+        uint64 id = _pesanKode(1, 1);
+        _kerjakan(id, 10);
+        vm.warp(block.timestamp + 120); // pelanggan datang 2 menit kemudian
+        vm.prank(tokoA);
+        vm.expectRevert(FotokopiKilat.BadCode.selector);
+        fk.serahkan(id, keccak256("salah"));
+        vm.prank(tokoB);
+        vm.expectRevert(FotokopiKilat.NotYourOrder.selector);
+        fk.serahkan(id, RAHASIA);
+
+        uint256 payout = uint256(H1) * 20 / 30;
+        uint256 tokoSebelum = _bal(tokoA);
+        uint256 pelangganSebelum = _bal(pelanggan);
+        vm.expectEmit(true, true, false, true);
+        emit FotokopiKilat.OrderFinished(id, tokoA, payout, H1 - payout, 10, true);
+        vm.prank(tokoA);
+        fk.serahkan(id, RAHASIA);
+        assertEq(_bal(tokoA) - tokoSebelum, payout);
+        assertEq(_bal(pelanggan) - pelangganSebelum, H1 - payout, "cashback");
+        assertEq(fk.ownerOf(id), pelanggan);
+        assertEq(_bal(address(fk)), 0);
+        vm.prank(tokoA);
+        vm.expectRevert(FotokopiKilat.NotReady.selector);
+        fk.serahkan(id, RAHASIA);
+    }
+
+    function test_Siap_TidakDijemput() public {
+        uint64 id = _pesanKode(3, 1);
+        _kerjakan(id, 9);
+        vm.warp(block.timestamp + JEMPUT - 1);
+        vm.expectRevert(FotokopiKilat.NotExpired.selector);
+        fk.expire(id);
+        vm.warp(block.timestamp + 1);
+        uint256 payout = uint256(H3) * 36 / 45;
+        vm.expectEmit(true, true, false, true);
+        emit FotokopiKilat.OrderFinished(id, tokoA, payout, H3 - payout, 9, false);
+        fk.expire(id);
+        assertEq(uint8(_status(id)), uint8(FotokopiKilat.Status.Finished));
+        assertEq(fk.ownerOf(id), pelanggan);
+        assertEq(_bal(address(fk)), 0);
+    }
+
+    function test_Komplain_DanPutuskan() public {
+        uint64 id = _pesanKode(1, 1);
+        _kerjakan(id, 10);
+        vm.prank(tokoA);
+        vm.expectRevert(FotokopiKilat.NotCustomer.selector);
+        fk.komplain(id);
+        vm.expectEmit(true, false, false, false);
+        emit FotokopiKilat.OrderDisputed(id);
+        vm.prank(pelanggan);
+        fk.komplain(id);
+        assertEq(uint8(_status(id)), uint8(FotokopiKilat.Status.Sengketa));
+
+        vm.prank(tokoA);
+        vm.expectRevert(FotokopiKilat.NotReady.selector);
+        fk.serahkan(id, RAHASIA);
+        vm.warp(block.timestamp + JEMPUT * 2);
+        vm.expectRevert(FotokopiKilat.NotExpired.selector);
+        fk.expire(id);
+
+        vm.startPrank(operator);
+        vm.expectRevert(FotokopiKilat.BadShare.selector);
+        fk.putuskan(id, 10_001);
+        uint256 bagian = uint256(H1) * 20 / 30 / 2;
+        uint256 tokoSebelum = _bal(tokoA);
+        uint256 pelangganSebelum = _bal(pelanggan);
+        fk.putuskan(id, 5_000);
+        vm.expectRevert(FotokopiKilat.NotDisputed.selector);
+        fk.putuskan(id, 5_000);
+        vm.stopPrank();
+        assertEq(_bal(tokoA) - tokoSebelum, bagian);
+        assertEq(_bal(pelanggan) - pelangganSebelum, H1 - bagian);
+        assertEq(uint8(_status(id)), uint8(FotokopiKilat.Status.Diputuskan));
+        assertEq(fk.balanceOf(pelanggan), 0, "sengketa tanpa NFT");
+        assertEq(fk.omzet(1, tokoA), bagian);
+        assertEq(_bal(address(fk)), 0);
+    }
+
+    function test_Komplain_TerlambatAtauBukanSiap() public {
+        uint64 id = _pesanKode(1, 1);
+        vm.prank(pelanggan);
+        vm.expectRevert(FotokopiKilat.NotReady.selector);
+        fk.komplain(id);
+        _kerjakan(id, 5);
+        vm.warp(block.timestamp + JEMPUT);
+        vm.prank(pelanggan);
+        vm.expectRevert(FotokopiKilat.TooLate.selector);
+        fk.komplain(id);
     }
 
     // ======================================================== BLZ-03.T2
@@ -370,7 +543,18 @@ contract FotokopiKilatTest is Test {
 
     function _tandaPesanan(uint256 key, FotokopiKilat.Pesanan memory p, uint256 nonce) internal view returns (bytes memory) {
         bytes32 structHash = keccak256(
-            abi.encode(fk.PESANAN_TYPEHASH(), p.pelanggan, p.jenis, keccak256(bytes(p.teks)), nonce, p.deadline, p.maxFee)
+            abi.encode(
+                fk.PESANAN_TYPEHASH(),
+                p.pelanggan,
+                p.jenis,
+                keccak256(bytes(p.teks)),
+                p.halaman,
+                p.dokumen,
+                p.kodeHash,
+                nonce,
+                p.deadline,
+                p.maxFee
+            )
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, keccak256(abi.encodePacked("\x19\x01", fk.domainSeparator(), structHash)));
         return abi.encodePacked(r, s, v);
@@ -385,7 +569,9 @@ contract FotokopiKilatTest is Test {
     }
 
     function _pesanan(Akun memory a, uint8 jenis) internal view returns (FotokopiKilat.Pesanan memory p) {
-        p = FotokopiKilat.Pesanan(a.addr, jenis, "Ijazah lewat relayer", block.timestamp + 10 minutes, FEE);
+        p = FotokopiKilat.Pesanan(
+            a.addr, jenis, "Ijazah lewat relayer", 1, bytes32(0), bytes32(0), block.timestamp + 10 minutes, FEE
+        );
     }
 
     function test_Relay_PesanTanpaMON() public {
@@ -474,5 +660,29 @@ contract FotokopiKilatTest is Test {
         fk.createOrderFor(p, sig, FotokopiKilat.Izin(0, 0, 0, 0, 0));
         assertEq(_bal(relayer), FEE);
         assertEq(_bal(address(fk)), H1);
+    }
+
+    function test_Relay_OrderNyataDenganKodeDanHalaman() public {
+        Akun memory a = _akunBaru("penonton");
+        FotokopiKilat.Pesanan memory p = _pesanan(a, 5);
+        p.halaman = 8;
+        p.dokumen = DOK;
+        p.kodeHash = keccak256(abi.encodePacked(RAHASIA));
+        (uint96 harga,) = fk.hargaUntuk(5, 8);
+        bytes memory sig = _tandaPesanan(a.key, p, 0);
+        FotokopiKilat.Izin memory z = _izin(a, harga + FEE);
+        vm.prank(relayer);
+        uint64 id = fk.createOrderFor(p, sig, z);
+        FotokopiKilat.Order memory o = fk.getOrder(id);
+        assertEq(o.halaman, 8);
+        assertEq(o.dokumen, DOK);
+        assertEq(o.harga, harga);
+        // halaman diubah relayer → tanda tangan tidak cocok
+        p.halaman = 1;
+        sig = _tandaPesanan(a.key, p, 1);
+        p.halaman = 2;
+        vm.prank(relayer);
+        vm.expectRevert(FotokopiKilat.BadSignature.selector);
+        fk.createOrderFor(p, sig, FotokopiKilat.Izin(0, 0, 0, 0, 0));
     }
 }

@@ -5,7 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {FotokopiKilat} from "../src/FotokopiKilat.sol";
 import {TestIDRX} from "../src/TestIDRX.sol";
 
-/// @notice Deploy token simulasi tIDRX + FotokopiKilat, katalog dalam Rupiah, fee relayer, 2 toko, buka sesi.
+/// @notice Deploy token simulasi tIDRX + FotokopiKilat v2, katalog Rupiah (tetap + per halaman), fee relayer, 2 toko, buka sesi.
 /// Alamat ditulis ke deployments/<chainId>.json. Blok deploy diambil dari receipt broadcast oleh `script/export.mjs`.
 ///
 /// Env (semua opsional kecuali TOKO_A dan TOKO_B):
@@ -15,6 +15,7 @@ import {TestIDRX} from "../src/TestIDRX.sol";
 ///   RELAY_FEE              fee relayer dalam satuan tIDRX (2 desimal), default 10000 = Rp100
 ///   NFT_NAME, NFT_SYMBOL   default "Fotokopi Kilat" / "FKL" (nama project masih ditunda)
 ///   BATAS_ANTRE            detik, default 45
+///   BATAS_JEMPUT           detik setelah Siap sebelum order bisa ditutup tanpa serah terima, default 600
 ///   START_SESSION          default true
 contract Deploy is Script {
     uint96 constant RP = 100; // 1 Rupiah = 100 satuan tIDRX
@@ -23,18 +24,28 @@ contract Deploy is Script {
         address tokoA = vm.envAddress("TOKO_A");
         address tokoB = vm.envAddress("TOKO_B");
         uint32 batasAntre = uint32(vm.envOr("BATAS_ANTRE", uint256(45)));
+        uint32 batasJemput = uint32(vm.envOr("BATAS_JEMPUT", uint256(600)));
         address minter = vm.envOr("MINTER", address(0));
 
         vm.startBroadcast();
         idrx = new TestIDRX(msg.sender);
         if (minter != address(0)) idrx.grantRole(idrx.MINTER_ROLE(), minter);
         fk = new FotokopiKilat(
-            vm.envOr("NFT_NAME", string("Fotokopi Kilat")), vm.envOr("NFT_SYMBOL", string("FKL")), batasAntre, idrx
+            vm.envOr("NFT_NAME", string("Fotokopi Kilat")),
+            vm.envOr("NFT_SYMBOL", string("FKL")),
+            batasAntre,
+            batasJemput,
+            idrx
         );
-        fk.setKatalog(1, 5_000 * RP, 30, _resep(1, 0), "FOTOKOPI KTP");
-        fk.setKatalog(2, 5_000 * RP, 30, _resep(2, 0), "BOARDING PASS");
-        fk.setKatalog(3, 10_000 * RP, 45, _resep(1, 3), "LAMINATING IJAZAH");
-        fk.setKatalog(4, 10_000 * RP, 45, _resep(2, 3), "MENU WARUNG");
+        // Harga tetap (mode demo mini-game, 1 halaman)
+        fk.setKatalog(1, 5_000 * RP, 0, 30, 0, _resep(1, 0), "FOTOKOPI KTP");
+        fk.setKatalog(2, 5_000 * RP, 0, 30, 0, _resep(2, 0), "BOARDING PASS");
+        fk.setKatalog(3, 10_000 * RP, 0, 45, 0, _resep(1, 3), "LAMINATING IJAZAH");
+        fk.setKatalog(4, 10_000 * RP, 0, 45, 0, _resep(2, 3), "MENU WARUNG");
+        // Harga per halaman (order dokumen nyata): dasar + per halaman, batas kerja dasar + per halaman
+        fk.setKatalog(5, 1_000 * RP, 500 * RP, 20, 3, _resep(2, 0), "PRINT DOKUMEN");
+        fk.setKatalog(6, 500 * RP, 300 * RP, 20, 2, _resep(1, 0), "FOTOKOPI DOKUMEN");
+        fk.setKatalog(7, 3_000 * RP, 1_000 * RP, 30, 5, _resep(2, 3), "PRINT + LAMINATING");
         fk.setFeeRelay(uint96(vm.envOr("RELAY_FEE", uint256(100 * RP))));
         fk.registerShop(tokoA, vm.envOr("NAMA_TOKO_A", string("Toko A")));
         fk.registerShop(tokoB, vm.envOr("NAMA_TOKO_B", string("Toko B")));
@@ -49,6 +60,7 @@ contract Deploy is Script {
         vm.serializeAddress(key, "tokoA", tokoA);
         vm.serializeAddress(key, "tokoB", tokoB);
         vm.serializeUint(key, "batasAntre", batasAntre);
+        vm.serializeUint(key, "batasJemput", batasJemput);
         string memory json = vm.serializeUint(key, "chainId", block.chainid);
         string memory path = string.concat(vm.projectRoot(), "/deployments/", vm.toString(block.chainid), ".json");
         vm.writeJson(json, path);
